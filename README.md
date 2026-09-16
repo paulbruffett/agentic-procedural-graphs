@@ -35,9 +35,8 @@ uv run pg gen-data finance  --seed 0 --n-train 30 --n-val 20 --n-test 30
 uv run pg gen-data hotpotqa --seed 0 --n 300          # downloads hotpotqa/hotpot_qa once, caches JSONL
 uv sync --extra enterprisearena && uv run pg gen-data enterprisearena   # fetches + verifies CFO-Env, 20/20/20 seeds + probe
 
-# single run, with or without a graph
-uv run pg run hotpotqa --split val --n 5
-uv run pg run hotpotqa --split val --n 5 --graph graphs/hotpotqa_expert.json
+# evaluate a split with no graph, one graph, or several at once
+uv run pg eval hotpotqa --split val --n 5 --graphs none,graphs/hotpotqa_expert.json
 
 # self-evolution from a skeleton (Start/End + one node per tool, zero edges) or from an existing graph
 uv run pg evolve hotpotqa --init scratch --rounds 2 --batch 5 --val-n 10   # cheap smoke test
@@ -48,8 +47,8 @@ uv run pg evolve finance  --init scratch --rounds 5 --batch 10               # w
 uv run pg eval finance --graphs none,graphs/finance_expert.json,graphs/evolved/finance/best.json
 ```
 
-`run` and `eval` print mean score, success rate, mean steps, solver vs guidance tokens (the guidance overhead),
-and cost. Trajectories (including every guidance string) and `metrics.json` go to `runs/<timestamp>-.../`.
+`eval` prints mean score, success rate, mean steps, solver vs guidance tokens (the guidance overhead), cost,
+and counts of episodes stopped early or errored. Trajectories (including every guidance string) and `metrics.json` go to `runs/<timestamp>-.../`.
 
 `evolve` writes to `graphs/evolved/<env>/`:
 - `round_k.json` and `best.json`
@@ -63,7 +62,7 @@ and cost. Trajectories (including every guidance string) and `metrics.json` go t
 uv sync --extra wandb        # then set PG_WANDB_PROJECT in .env (and `wandb login` or WANDB_API_KEY)
 ```
 
-When `PG_WANDB_PROJECT` is set, every `run` / `eval` / `evolve` command creates one W&B run (metrics only, no LLM
+When `PG_WANDB_PROJECT` is set, every `eval` / `evolve` command creates one W&B run (metrics only, no LLM
 tracing), with the CLI args and `Config` as the run config:
 - `evolve` logs one step per round:
   - `train/score`, `train/success_rate`
@@ -75,7 +74,7 @@ tracing), with the CLI args and `Config` as the run config:
 
   At the end it adds a `rounds` table (edits and rationale) and a `graph` artifact with `best.json` and the
   evolution log.
-- `run` / `eval` log a per-graph summary (`<graph>/mean_score`, `success_rate`, `guidance_overhead`, `cost`, and
+- `eval` logs a per-graph summary (`<graph>/mean_score`, `success_rate`, `guidance_overhead`, `cost`, and
   so on) and an `eval` comparison table.
 
 Without the variable, nothing is imported or sent. Local files stay the source of truth either way.

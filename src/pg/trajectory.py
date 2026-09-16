@@ -67,5 +67,6 @@ def summarize(trajectories: list[Trajectory]) -> dict:
         "success_rate": sum(t.success for t in scored) / n,
         "mean_steps": sum(len(t.steps) for t in scored) / n,
         "errors": len(trajectories) - len(scored),
+        "stopped_early": sum(1 for t in scored if t.metrics.get("stopped_early")),
         **usage,
     }

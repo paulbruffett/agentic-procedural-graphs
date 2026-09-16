@@ -221,11 +221,14 @@ class EnterpriseArenaEpisode(Episode):
     def score(self) -> dict:
         s = self.state
         horizon = s.max_episode_months + 1  # months 0..max_episode_months
-        survived = s.episode_terminated and s.termination_reason != "Cash balance went negative"
+        bankrupt = s.termination_reason == "Cash balance went negative"
+        survived = s.episode_terminated and not bankrupt
         months = horizon if survived else s.current_month
         return {
             "score": months / horizon,
             "success": survived,
+            # "stopped" means our harness ended it (step cap, timeout), not the simulator
+            "outcome": "survived" if survived else ("bankrupt" if bankrupt else "stopped"),
             "survived": survived,
             "months_survived": months,
             "horizon": horizon,

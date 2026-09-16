@@ -31,6 +31,7 @@ def table_row(r: dict) -> dict:
         "guidance_tokens": guidance,
         "guidance_overhead": guidance / solver if solver else None,
         "cost": r.get("solver_cost", 0) + r.get("guidance_cost", 0),
+        "stopped": r.get("stopped_early", 0),
         "errors": r["errors"],
     }
 
@@ -57,12 +58,14 @@ def evaluate(
 
 
 def format_table(rows: list[dict]) -> str:
-    header = f"{'graph':<45} {'n':>4} {'score':>6} {'success':>7} {'steps':>6} {'solver tok':>11} {'guide tok':>10} {'overhead':>8} {'cost $':>8} {'err':>4}"
+    header = (f"{'graph':<45} {'n':>4} {'score':>6} {'success':>7} {'steps':>6} {'solver tok':>11} "
+              f"{'guide tok':>10} {'overhead':>8} {'cost $':>8} {'stop':>5} {'err':>4}")
     lines = [header, "-" * len(header)]
     for t in map(table_row, rows):
         overhead = "-" if t["guidance_overhead"] is None else f"{t['guidance_overhead']:.0%}"
         lines.append(
             f"{t['graph'][-45:]:<45} {t['n']:>4} {t['mean_score']:>6.3f} {t['success_rate']:>7.1%} {t['mean_steps']:>6.1f}"
-            f" {t['solver_tokens']:>11,} {t['guidance_tokens']:>10,} {overhead:>8} {t['cost']:>8.3f} {t['errors']:>4}"
+            f" {t['solver_tokens']:>11,} {t['guidance_tokens']:>10,} {overhead:>8} {t['cost']:>8.3f}"
+            f" {t['stopped']:>5} {t['errors']:>4}"
         )
     return "\n".join(lines)

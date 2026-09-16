@@ -24,6 +24,8 @@ def start_run(cfg: Config, job_type: str, name: str, extra: dict) -> AbstractCon
 
 
 def log_table(run, key: str, rows: list[dict]) -> None:
+    if not rows:
+        return
     import wandb
 
     columns = list(dict.fromkeys(k for r in rows for k in r))

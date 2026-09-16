@@ -42,7 +42,6 @@ class FinanceEnv(Environment):
         "horizon survived; success means surviving all months."
     )
     max_steps = MAX_STEPS
-    success_threshold = 1.0
 
     def __init__(self, cfg: Config):
         self.data_dir = cfg.data_dir / "finance"

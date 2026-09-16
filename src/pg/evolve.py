@@ -52,6 +52,8 @@ def evolve(
     run=None,  # optional wandb run (see pg.tracking)
 ) -> ProceduralGraph:
     train, val = env.tasks("train"), env.tasks("val")[:val_n]
+    if not train or not val:
+        raise ValueError(f"evolution needs non-empty train and val splits (got {len(train)} / {len(val)})")
     refiner = make_llm(cfg.refiner_model, cfg.temperature)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "prompts").mkdir(exist_ok=True)
@@ -123,24 +125,8 @@ def evolve(
         history.append(entry)
 
         if run:
-            metrics = {
-                "train/score": batch_summary["mean_score"],
-                "train/success_rate": batch_summary["success_rate"],
-                "train/mean_steps": batch_summary["mean_steps"],
-                "val/score": current_val,  # score of the graph kept after this round's decision
-                "accepted": int(accepted),
-                "rejection_memory": len(rejected),
-                "graph/nodes": len(current.nodes),
-                "graph/edges": len(current.edges),
-                "tokens/solver": tokens(batch_summary, "solver") + tokens(val_summary, "solver"),
-                "tokens/guidance": tokens(batch_summary, "guidance") + tokens(val_summary, "guidance"),
-                "tokens/refiner": refiner_usage["input_tokens"] + refiner_usage["output_tokens"],
-                "cost/round": entry["cost"],
-                "cost/total": spent,
-            }
-            if cand_val is not None:
-                metrics["val/candidate_score"] = cand_val
-            run.log(metrics, step=k)
+            _log_round(run, k, entry, current, current_val, rejected, batch_summary, val_summary,
+                       refiner_usage, cand_val, spent)
 
         after = "n/a (empty edit set)" if cand_val is None else f"{cand_val:.3f}"
         verdict = "ACCEPTED" if accepted else "rejected"
@@ -152,3 +138,27 @@ def evolve(
         log_table(run, "rounds", [{c: e[c] for c in columns} for e in history])
         log_files(run, f"{env.name}-evolved-graph", "graph", [out_dir / "best.json", log_path])
     return current
+
+
+def _log_round(run, k: int, entry: dict, graph: ProceduralGraph, val_score: float, rejected: list[dict],
+               batch_summary: dict, val_summary: dict, refiner_usage: dict, cand_val: float | None,
+               spent: float) -> None:
+    """Per-round W&B metrics (see pg.tracking)."""
+    metrics = {
+        "train/score": batch_summary["mean_score"],
+        "train/success_rate": batch_summary["success_rate"],
+        "train/mean_steps": batch_summary["mean_steps"],
+        "val/score": val_score,  # score of the graph kept after this round's decision
+        "accepted": int(entry["accepted"]),
+        "rejection_memory": len(rejected),
+        "graph/nodes": len(graph.nodes),
+        "graph/edges": len(graph.edges),
+        "tokens/solver": tokens(batch_summary, "solver") + tokens(val_summary, "solver"),
+        "tokens/guidance": tokens(batch_summary, "guidance") + tokens(val_summary, "guidance"),
+        "tokens/refiner": refiner_usage["input_tokens"] + refiner_usage["output_tokens"],
+        "cost/round": entry["cost"],
+        "cost/total": spent,
+    }
+    if cand_val is not None:
+        metrics["val/candidate_score"] = cand_val
+    run.log(metrics, step=k)

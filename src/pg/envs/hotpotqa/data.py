@@ -11,6 +11,8 @@ def generate(out_dir: Path, seed: int = 0, n: int = 300) -> dict[str, int]:
     """Split n sampled validation examples 1/3 train, 1/6 val, rest test (100/50/150 for n=300)."""
     from datasets import load_dataset
 
+    if n < 6:
+        raise ValueError(f"n={n} is too small: the 1/3 - 1/6 - rest split needs at least 6 examples")
     ds = load_dataset("hotpotqa/hotpot_qa", "distractor", split="validation")
     idx = random.Random(seed).sample(range(len(ds)), n)
     n_train, n_val = n // 3, n // 6
