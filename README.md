@@ -1,4 +1,4 @@
-# procedural-graphs
+# agentic-procedural-graphs
 
 A small, readable reference implementation of **Procedural Graphs: Self-Evolving Execution Structures for LLM
 Agents** (arXiv 2609.09153) on LangGraph.
@@ -60,6 +60,32 @@ It refuses to start if that directory already holds a run (`evolution_log.jsonl`
 write elsewhere or `--overwrite` to replace it. A validation pass only counts when at least
 `Config.val_min_scored` (80%) of its episodes ran without error: below that the baseline aborts the run, and a
 candidate round is logged as no data (graph kept, nothing added to rejection memory).
+
+## What is not in this repository
+
+Four paths are gitignored. Everything needed to rebuild them is here; nothing else is missing.
+
+| Path | Rebuild with | Notes |
+|---|---|---|
+| `data/finance/` | `uv run pg gen-data finance --seed 0` | Fully deterministic from the seed. |
+| `data/hotpotqa/` | `uv run pg gen-data hotpotqa --seed 0 --n 300` | Seeded sample of the `hotpotqa/hotpot_qa` distractor validation split on Hugging Face (CC BY-SA 4.0). |
+| `third_party/cfo-env/` and `data/enterprisearena/` | `uv sync --extra enterprisearena && uv run pg gen-data enterprisearena` | Downloads the simulator, verifies it, then writes seeded splits (episodes are just simulator seeds). |
+| `runs/`, `graphs/evolved/` | `uv run pg eval ...` / `uv run pg evolve ...` | Outputs. LLM calls are not deterministic (temperature is not sent by default), so expect the numbers in the results sections to reproduce in distribution, not exactly. |
+
+**If the CFO-Env mirror disappears.** The simulator code is published only as an anonymous review snapshot
+(`anonymous.4open.science/r/CFO-Env-F1B9`), which may be taken down; the Hugging Face dataset `TheFinAI/CFO-Env`
+has the data and documents but not the code. It has no license, so it cannot be redistributed here. The adapter
+does not care where the copy comes from: put the snapshot's files in `third_party/cfo-env/` (from the authors, or
+a later official release of EnterpriseArena, arXiv 2603.23638) and run `pg gen-data enterprisearena` again. It
+skips the download when every file matches
+[`cfo_env_sha256.json`](src/pg/envs/enterprisearena/cfo_env_sha256.json), and otherwise names the files that
+differ. A newer release will not match the 2026-05-07 hashes; the results here were produced with that snapshot,
+so treat a different version as a different benchmark (and regenerate the manifest deliberately if you adopt it).
+The other two scenarios (finance, HotpotQA) do not depend on it.
+
+*Maintainer's setup.* A private companion repository holds a verified copy of these four paths (the unlicensed
+simulator cannot be shared). It is cloned into `private/` and symlinked into place with `sh private/link.sh`;
+new runs and evolved graphs are committed there, never here.
 
 ### W&B metrics (optional)
 
@@ -144,6 +170,7 @@ raising money at month 0.
 *Not redistributed.* `pg gen-data enterprisearena` downloads the benchmark authors' anonymous review snapshot
 (2026-05-07) into `third_party/cfo-env/` (gitignored) and checks every file against a pinned sha256 manifest.
 The code has no license file and the data is CC BY-NC-ND 4.0, so use it for non-commercial research only.
+If the mirror is gone, see [What is not in this repository](#what-is-not-in-this-repository).
 
 *How it runs.* The agent is CFO of a consumer-lending fintech for 132 months of real 2015–2025 macro data:
 - Each month it may make up to 20 information-tool calls plus free notes, then exactly one action (raise equity or debt, close the books, or pass) closes the month.

@@ -3,8 +3,12 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-runs/
-data/
-graphs/evolved/
 wandb/
-third_party/
+
+# Not in this repository (see README "What is not in this repository"). No trailing slash, so these also match
+# the symlinks that private/link.sh creates.
+third_party
+data
+runs
+graphs/evolved
+private
