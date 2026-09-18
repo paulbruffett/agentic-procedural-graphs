@@ -149,6 +149,9 @@ The code has no license file and the data is CC BY-NC-ND 4.0, so use it for non-
 - Hidden user-growth surges drain cash through new loans.
 
 Episodes differ only by simulator seed (20/20/20), plus a 5-seed, 36-month `probe` split for cost checks.
+`train` and `val` run to 66 months (the first two growth surges) so evolution stays affordable; `test` keeps
+the benchmark's full 132-month horizon. A guided full-horizon episode is 500-800 steps, i.e. 1000-1600 model
+calls and 1-3 hours, so `Config.episode_timeout_s` defaults to 4 hours and only catches genuine hangs.
 Score is the fraction of months survived, and success means cash never went negative.
 
 Scripted policies over 50 seeds, full horizon, no LLM:

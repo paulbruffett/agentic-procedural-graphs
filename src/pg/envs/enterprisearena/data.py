@@ -23,6 +23,7 @@ MIRROR_ZIP = "https://anonymous.4open.science/api/repo/CFO-Env-F1B9/zip"
 MANIFEST: dict[str, str] = json.loads(Path(__file__).with_name("cfo_env_sha256.json").read_text())
 FULL_MONTHS = 131  # last month index; the simulator caps its configured 132 at the 2015-2025 data length
 PROBE_MONTHS = 36  # covers the first hidden growth surge (months ~23-36)
+EVOLVE_MONTHS = 66  # train/val horizon: covers the first two growth surges at about half the cost per episode
 
 
 def verify(code_dir: Path = CODE_DIR) -> list[str]:
@@ -66,9 +67,10 @@ def generate(
     out_dir: Path, seed: int = 0, n_train: int = 20, n_val: int = 20, n_test: int = 20, n_probe: int = 5
 ) -> dict[str, int]:
     """Episodes differ only by simulator seed (same company, same macro timeline), 20/20/20 as in the
-    Procedural Graphs self-evolution study. `probe` is a short-horizon split for cheap cost checks."""
+    Procedural Graphs self-evolution study. train/val run to EVOLVE_MONTHS so evolution stays affordable;
+    `test` keeps the benchmark's full horizon, and `probe` is a short split for cost checks."""
     fetch_code()
-    splits = {"train": (n_train, FULL_MONTHS), "val": (n_val, FULL_MONTHS), "test": (n_test, FULL_MONTHS),
+    splits = {"train": (n_train, EVOLVE_MONTHS), "val": (n_val, EVOLVE_MONTHS), "test": (n_test, FULL_MONTHS),
               "probe": (n_probe, PROBE_MONTHS)}
     for k, (split, (n, months)) in enumerate(splits.items()):
         write_tasks(out_dir / f"{split}.jsonl", [make_task(seed * 10_000 + 1_000 * k + i, months) for i in range(n)])

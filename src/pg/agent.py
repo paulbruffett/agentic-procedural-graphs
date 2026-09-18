@@ -141,9 +141,9 @@ def run_episode(
     try:
         # Stream full state values so a mid-episode failure still leaves the last good state for scoring.
         limit = 3 * (env.max_steps + cfg.max_nudges) + 5
-        deadline = time.monotonic() + cfg.episode_timeout_s
+        deadline = time.monotonic() + cfg.episode_timeout_s if cfg.episode_timeout_s else None
         for state in app.stream(state, {"recursion_limit": limit}, stream_mode="values"):
-            if time.monotonic() > deadline:  # one stuck episode must not stall a whole batch
+            if deadline and time.monotonic() > deadline:  # one stuck episode must not stall a whole batch
                 raise TimeoutError(f"episode exceeded {cfg.episode_timeout_s}s")
     except Exception as e:
         error = f"{type(e).__name__}: {e}"

@@ -62,6 +62,8 @@ def evolve(
 
     print(f"[round 0] validating initial graph ({init.summary()}) on {len(val)} val tasks", flush=True)
     s = _validate(env, val, init, cfg, out_dir / "trajectories" / "round_0_val.jsonl")
+    if not s["n_scored"]:
+        raise RuntimeError(f"every baseline validation episode errored ({s['errors']}); fix the harness first")
     current, current_val = init, s["mean_score"]
     current.save(out_dir / "round_0.json")
     current.save(out_dir / "best.json")
@@ -96,9 +98,14 @@ def evolve(
         no_op = _canonical(candidate) == _canonical(current)  # e.g. every edge dropped for unknown endpoints
         if no_op and not edits.is_empty():
             print(f"[round {k}] edits changed nothing ({len(warnings)} warnings); skipping validation", flush=True)
+        no_data = False
         if not edits.is_empty() and not no_op:
             val_summary = _validate(env, val, candidate, cfg, out_dir / "trajectories" / f"round_{k}_val.jsonl")
-            cand_val = val_summary["mean_score"]
+            no_data = not val_summary["n_scored"]  # crashes/timeouts must not read as a catastrophic score
+            if no_data:
+                print(f"[round {k}] every validation episode errored; keeping the current graph", flush=True)
+            else:
+                cand_val = val_summary["mean_score"]
         accepted = cand_val is not None and cand_val >= current_val
 
         entry = {
@@ -108,14 +115,15 @@ def evolve(
             "val_before": current_val,
             "val_after": cand_val,
             "accepted": accepted,
-            "edits": edits.summary() + (" (no-op: nothing applied)" if no_op and not edits.is_empty() else ""),
+            "edits": edits.summary() + (" (no-op: nothing applied)" if no_op and not edits.is_empty() else "")
+                     + (" (no validation data: every episode errored)" if no_data else ""),
             "rationale": edits.rationale,
             "warnings": warnings,
             "cost": total_cost(batch_summary) + total_cost(val_summary) + refiner_usage["cost"],
         }
         if accepted:
             current, current_val = candidate, cand_val
-        elif not edits.is_empty():
+        elif not edits.is_empty() and not no_op and not no_data:  # only a real validation loss is remembered
             rejected.append({k2: entry[k2] for k2 in ("round", "edits", "rationale", "val_before", "val_after")})
         entry["graph"] = current.summary()
         current.save(out_dir / f"round_{k}.json")

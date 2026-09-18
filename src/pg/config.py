@@ -23,7 +23,8 @@ class Config:
 
     # Runtime
     concurrency: int = 4
-    episode_timeout_s: int = 3600  # wall-clock budget per episode
+    episode_timeout_s: int = 14_400  # wall-clock budget per episode (4h); 0 disables. A guided 132-month
+    # EnterpriseArena episode is 500-800 steps, i.e. 1000-1600 LLM calls, so this only catches real hangs.
     max_nudges: int = 3  # times to prompt the solver to continue after a text-only turn
     observation_max_chars: int = 600  # tool observation truncation in Step records
     refiner_k: int = 3  # best / worst trajectories shown to the refiner
