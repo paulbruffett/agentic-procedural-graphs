@@ -1,6 +1,8 @@
 """Evolution loop with rollouts and refiner stubbed out (no network)."""
 import json
 
+import pytest
+
 from pg import evolve as ev
 from pg.config import Config
 from pg.envs.base import Task
@@ -76,6 +78,60 @@ def test_accept_then_reject_then_memory_in_prompt(tmp_path, monkeypatch):
     assert "(empty)" in (tmp_path / "prompts" / "round_2.txt").read_text()
     round3 = (tmp_path / "prompts" / "round_3.txt").read_text()
     assert "round 2: delete edges: Start-LEADS_TO->search | val 1.000 -> 0.500" in round3
+
+
+def test_refiner_failure_keeps_graph_and_errored_episodes_are_not_evidence(tmp_path, monkeypatch):
+    def run_batch_with_crash(env, tasks, graph, cfg):
+        ts = fake_run_batch(env, tasks, graph, cfg)
+        if len(tasks) == 3:  # train batches only; validation stays clean
+            ts[0] = Trajectory(task_id="crashed", score=0.0, error="TimeoutError: boom")
+        return ts
+
+    replies = iter([ValueError("no JSON in reply"), EditSet(rationale="add backbone", add_edges=[GOOD])])
+
+    def propose(llm, prompt):
+        reply = next(replies)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply, {"cost": 0.1, "input_tokens": 7, "output_tokens": 3}
+
+    monkeypatch.setattr(ev, "run_batch", run_batch_with_crash)
+    monkeypatch.setattr(ev, "make_llm", lambda *a, **k: None)
+    monkeypatch.setattr(ev, "propose_edits", propose)
+
+    init = ProceduralGraph.skeleton("stub", [("search", "find")])
+    best = ev.evolve(StubEnv(), init, Config(), rounds=2, batch=3, val_n=4, out_dir=tmp_path)
+
+    log = [json.loads(line) for line in (tmp_path / "evolution_log.jsonl").read_text().splitlines()]
+    assert log[1]["accepted"] is False and log[1]["val_after"] is None  # failed round: no validation, run goes on
+    assert log[1]["rationale"].startswith("refiner failed: ValueError")
+    assert log[2]["accepted"] is True and GOOD.key() in {e.key() for e in best.edges}
+    assert "crashed" not in (tmp_path / "prompts" / "round_1.txt").read_text()
+
+
+def test_thin_validation_is_no_data_and_existing_run_is_not_overwritten(tmp_path, monkeypatch):
+    def run_batch_flaky_candidate(env, tasks, graph, cfg):
+        ts = fake_run_batch(env, tasks, graph, cfg)
+        if graph.edges and len(tasks) == 4:  # candidate validation: half the episodes crash
+            ts[:2] = [Trajectory(task_id=t.task_id, error="TimeoutError: boom") for t in ts[:2]]
+        return ts
+
+    monkeypatch.setattr(ev, "run_batch", run_batch_flaky_candidate)
+    monkeypatch.setattr(ev, "make_llm", lambda *a, **k: None)
+    monkeypatch.setattr(ev, "propose_edits", lambda llm, prompt: (
+        EditSet(rationale="add backbone", add_edges=[GOOD]), {"cost": 0.1, "input_tokens": 7, "output_tokens": 3}))
+
+    init = ProceduralGraph.skeleton("stub", [("search", "find")])
+    best = ev.evolve(StubEnv(), init, Config(), rounds=1, batch=2, val_n=4, out_dir=tmp_path)
+
+    entry = json.loads((tmp_path / "evolution_log.jsonl").read_text().splitlines()[1])
+    # 2/4 scored at 1.0 would beat the 0.5 baseline, but 2 < 0.8 * 4, so the round is not decided on it.
+    assert entry["accepted"] is False and entry["val_after"] is None and "no validation data" in entry["edits"]
+    assert best == init
+
+    with pytest.raises(FileExistsError):
+        ev.evolve(StubEnv(), init, Config(), rounds=1, batch=2, val_n=4, out_dir=tmp_path)
+    ev.evolve(StubEnv(), init, Config(), rounds=1, batch=2, val_n=4, out_dir=tmp_path, overwrite=True)
 
 
 def test_wandb_disabled_by_default():

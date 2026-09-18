@@ -10,7 +10,7 @@ Decisions already made with the user:
 - All LLM calls via **OpenRouter** through `langchain-openai` (`ChatOpenAI(base_url="https://openrouter.ai/api/v1")`), one `OPENROUTER_API_KEY` in `.env`.
 - Solver + guidance default `openai/gpt-5.6-luna` ($0.20/$1.20 per MTok). Refiner defaults to a stronger OpenRouter model (`anthropic/claude-opus-5`, fall back to `openai/gpt-5.6-luna-pro` if that id is not served). All three are config strings.
 - Tooling: `uv` + `pyproject.toml`. LangGraph 1.2.x supports Python ≤3.13, the machine has 3.14, so pin `requires-python = ">=3.12,<3.14"` and let uv fetch 3.13.
-- Greedy decoding (temperature 0) everywhere, matching the paper.
+- Greedy decoding (temperature 0) was the intent, matching the paper. As built, `Config.temperature` defaults to `None` (not sent) because the default solver model rejects the parameter; set it for models that accept it.
 
 ## Paper facts the implementation mirrors
 
@@ -33,7 +33,7 @@ procedural-graphs/
   pyproject.toml  .env.example  README.md
   src/pg/
     config.py        Config dataclass: model ids, h, w, concurrency, paths; loads .env
-    llm.py           make_llm(model_id) -> ChatOpenAI via OpenRouter, temperature 0
+    llm.py           make_llm(model_id, temperature) -> ChatOpenAI via OpenRouter; temperature only sent when set
     graph.py         ProceduralGraph: Node/Edge/Relation, JSON load/save, neighborhood(node, h),
                      apply(EditSet) -> new graph, serialize(subgraph, active_node) -> text
     trajectory.py    Step(tool, args, observation), Trajectory(task_id, steps, score, usage), JSONL io
@@ -42,11 +42,13 @@ procedural-graphs/
     refiner.py       EditSet pydantic schema + refiner prompt + propose_edits(llm, graph, traces, rejected)
     evolve.py        evolve(env, init_graph, cfg): rounds of rollout/refine/validate/accept, persists per-round graphs + log
     evaluate.py      run a split with/without graph(s); mean score, success rate, token overhead
-    cli.py           argparse entry point `pg`: gen-data | run | evolve | eval
+    cli.py           argparse entry point `pg`: gen-data | evolve | eval
+    tracking.py      optional W&B metrics logging (added later; see Build status)
     envs/
       base.py        Environment protocol (below)
       finance/  sim.py  tools.py  tasks.py  env.py
       hotpotqa/ data.py tools.py  scoring.py env.py
+      enterprisearena/  data.py tools.py env.py   (added later; see Build status)
   graphs/            finance_expert.json, hotpotqa_expert.json (hand-written); evolved/<env>/round_k.json
   data/              generated task files (gitignored except a tiny sample)
   runs/              trajectories + metrics per run (gitignored)
@@ -117,11 +119,10 @@ Deterministic, seeded, no LLM in the environment.
 ```
 pg gen-data finance  --seed 0 --n-train 30 --n-val 20 --n-test 30
 pg gen-data hotpotqa --seed 0 --n 300
-pg run    <env> --split test --n 10 [--graph graphs/x.json] [--concurrency 4]
 pg evolve <env> --init scratch|<path> --rounds 5 --batch 10 --val-n 20
-pg eval   <env> --split test --graphs none,graphs/x.json,graphs/evolved/<env>/best.json
+pg eval   <env> --split test [--n 10] --graphs none,graphs/x.json,graphs/evolved/<env>/best.json [--concurrency 4]
 ```
-`run`/`eval` print mean score, success rate, mean steps, and solver vs guidance token totals; write trajectories to `runs/<timestamp>/`.
+`eval` prints mean score, success rate, mean steps, and solver vs guidance token totals; writes trajectories to `runs/<timestamp>-eval-<env>/`. (`pg run` was dropped: it was `pg eval` with one graph.)
 
 ## Dependencies
 `langgraph>=1.2,<2`, `langchain-openai>=1.6,<2`, `langchain-core`, `pydantic>=2`, `python-dotenv`, `datasets` (HotpotQA only); dev: `pytest`. No retrieval libraries, no LLM judge.
@@ -136,7 +137,7 @@ pg eval   <env> --split test --graphs none,graphs/x.json,graphs/evolved/<env>/be
 
 ## Verification
 - `uv run pytest`: graph ops, edit application, EM/F1, finance sim dynamics, naive-vs-expert policy survival gap. No network.
-- HotpotQA smoke: `pg run hotpotqa --split val --n 5` with and without expert graph; trajectories show guidance text in the solver system prompt and steps recorded correctly.
+- HotpotQA smoke: `pg eval hotpotqa --split val --n 5 --graphs none,graphs/hotpotqa_expert.json`; trajectories show guidance text in the solver system prompt and steps recorded correctly.
 - Evolution smoke: `pg evolve hotpotqa --init scratch --rounds 2 --batch 5 --val-n 10` produces round graphs, an accepted or rejected decision per round, and a rejection memory entry appearing in the next round's refiner prompt.
 - Finance headline: `pg eval finance --graphs none,graphs/finance_expert.json` on the test split shows the expert graph beating no-graph on survival; then `pg evolve finance --init scratch --rounds 5 --batch 10 --val-n 20` and confirm validation survival climbs across rounds, mirroring the paper's Figure 4 shape.
 
@@ -149,6 +150,7 @@ Offline checks done: agent loop with scripted fake chat models (`tests/test_agen
 NOT yet done (needs `OPENROUTER_API_KEY` in `.env`): `pg gen-data hotpotqa` (HF download), every LLM smoke test in the Verification section, the finance headline and evolution runs, and the README results table.
 
 Choices made during the build, beyond the design text:
+- Review fixes (2026-09-18): removed dead code from the EnterpriseArena env (a duplicate `_usd`, an uncalled `_event` that referenced an unimported `re` and an undefined `_millions`, unused `ACTION_TOOLS`); `evolve` ranks only non-errored train trajectories for the refiner (same rule as `summarize()`), so harness crashes are not presented as procedural failures; a refiner failure (exception, unparseable reply, or no scored train episodes) no longer kills the run: the round is logged with rationale `refiner failed: ...`, the graph is kept, nothing is validated or added to rejection memory. Same day, on request: the val gate needs `Config.val_min_scored` (0.8) of the val episodes to have run without error, for the round-0 baseline (else abort) and for each candidate (else the round is no data: graph kept, no rejection-memory entry), so a graph can no longer be accepted on a handful of survivors; and `evolve` refuses an output directory that already holds `evolution_log.jsonl` unless `pg evolve --overwrite` (or a different `--out`) is given.
 - `envs/base.py` gained `write_tasks` / `read_tasks` JSONL helpers shared by both scenarios.
 - Finance `score = months_survived / H` (equals 1.0 exactly when survived), so the val gate and refiner ranking get a denser signal than binary survival; `success = survived`.
 - Finance investor rules added to make timing matter: requests are declined while runway > 9 months, and capped at 6 months of net burn. Calibration over 200 seeds: never raise 0%, raise at runway < 3 / 5 / 7 months ≈ 30% / 60% / 85%, raise as soon as allowed (< 9) + cut burn on alerts ≈ 95%. The scripted expert therefore uses "runway < 9" rather than "lag + buffer".
@@ -165,8 +167,6 @@ Choices made during the build, beyond the design text:
 Two deliberate deviations from the design text above (already reflected in the written code):
 1. **Environment is split into `Environment` (shared, read-only: `tasks`, `start`, `system_prompt`, `tool_descriptions`) and `Episode` (per-rollout state: `tools`, `is_done`, `score`, `on_text`).** `env.start(task)` returns a fresh `Episode`; tools close over it. This is what makes thread-pooled rollouts safe.
 2. **Text-only solver turns.** When the solver replies without a tool call and the episode is not done, `agent.py` should call `episode.on_text(text)`; if it returns False, append a `HumanMessage("The task is not complete. Continue by calling tools.")` and loop back to `guide`, at most `Config.max_nudges` times. HotpotQA's `on_text` accepts the text as the final answer; finance's returns False.
-
-Everything else in the layout (guidance, agent, refiner, evolve, evaluate, cli, both envs, graphs JSON, tests, README) is still to be written, in the implementation order above. First command in the next session: `uv sync` (uv will fetch Python 3.13), then `uv run pytest` once tests exist.
 
 ## Open risks (flagged, not blocking)
 - `anthropic/claude-opus-5` and `openai/gpt-5.6-luna-pro` both have live OpenRouter model pages advertising tools + response_format; pricing for the Claude one was not visible, so the first evolve run should print per-round cost from OpenRouter's `usage.cost` field. Refiner default is `anthropic/claude-opus-5`, fallback `openai/gpt-5.6-luna-pro`.

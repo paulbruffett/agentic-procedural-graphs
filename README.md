@@ -56,6 +56,11 @@ and counts of episodes stopped early or errored. Trajectories (including every g
 - `prompts/round_k.txt`: the exact refiner prompt, including rejection memory
 - `trajectories/`
 
+It refuses to start if that directory already holds a run (`evolution_log.jsonl` exists); pass `--out <dir>` to
+write elsewhere or `--overwrite` to replace it. A validation pass only counts when at least
+`Config.val_min_scored` (80%) of its episodes ran without error: below that the baseline aborts the run, and a
+candidate round is logged as no data (graph kept, nothing added to rejection memory).
+
 ### W&B metrics (optional)
 
 ```bash

@@ -39,7 +39,7 @@ def run_evolve(args: argparse.Namespace, cfg: Config, env: Environment, run) -> 
     init = (ProceduralGraph.skeleton(f"{env.name}_evolved", env.tool_descriptions())
             if args.init == "scratch" else ProceduralGraph.load(args.init))
     out = args.out or cfg.graphs_dir / "evolved" / env.name
-    best = evolve(env, init, cfg, args.rounds, args.batch, args.val_n, out, run)
+    best = evolve(env, init, cfg, args.rounds, args.batch, args.val_n, out, run, args.overwrite)
     print(f"best graph ({best.summary()}) saved to {out / 'best.json'}")
 
 
@@ -70,6 +70,7 @@ def main(argv: list[str] | None = None) -> None:
     e.add_argument("--batch", type=int, default=10)
     e.add_argument("--val-n", type=int, default=None, help="default: whole val split")
     e.add_argument("--out", type=Path, default=None, help="default: graphs/evolved/<env>/")
+    e.add_argument("--overwrite", action="store_true", help="replace an earlier run's results in the output directory")
 
     v = sub.add_parser("eval", help="run a split with none, one or several graphs")
     v.add_argument("env", choices=ENVS)

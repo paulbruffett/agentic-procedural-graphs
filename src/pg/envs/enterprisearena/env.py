@@ -20,7 +20,6 @@ from pg.trajectory import Trajectory
 
 STEPS_PER_MONTH = 8  # episode step cap (tool, action and note calls) = STEPS_PER_MONTH * months
 NOTE_BUDGET_PER_MONTH = 20  # notes are free in the simulator; cap them so a note loop cannot stall a month
-ACTION_TOOLS = ("fund_raising_request", "book_closing", "pass")
 DROPPED = "Not executed: this month already ended with an action. Continue in the new month."
 
 SYSTEM_PROMPT = """You are an AI CFO (Chief Financial Officer) agent for a fintech company. Steward liquidity: maintain enough cash to support operations, growth, and investments. Do not allow the company to run out of cash.
@@ -52,26 +51,6 @@ def simulator():
 
 def _usd(x: float) -> str:
     return f"-${-x:,.0f}" if x < 0 else f"${x:,.0f}"
-
-
-def _usd(x: float) -> str:
-    return f"-${-x:,.0f}" if x < 0 else f"${x:,.0f}"
-
-
-def _event(line: str) -> str:
-    """Compress a month-end event line for trajectory summaries."""
-    line = line.strip()
-    if line.startswith("Fundraising approved"):
-        got = re.search(r"\$([\d,]+) received", line)
-        kind = "equity" if "equity request" in line else "debt"
-        return f"approved {kind} {_millions('$' + got.group(1))}" if got else "approved"
-    if line.startswith("Fundraising declined"):
-        return "declined " + ("equity" if "equity request" in line else "debt")
-    if "already have a pending" in line:
-        return "rejected(pending)"
-    if line.startswith("Episode over"):
-        return line[:80]
-    return line[:60]
 
 
 def _musd(x: float) -> str:

@@ -29,6 +29,7 @@ class Config:
     observation_max_chars: int = 600  # tool observation truncation in Step records
     refiner_k: int = 3  # best / worst trajectories shown to the refiner
     refiner_max_chars: int = 60_000  # tail-truncate refiner context (paper's L_max)
+    val_min_scored: float = 0.8  # a validation pass counts only if this fraction of episodes ran without error
 
     wandb_project: str | None = None  # set to log metrics to Weights & Biases
 
