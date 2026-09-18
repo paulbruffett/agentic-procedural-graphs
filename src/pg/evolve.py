@@ -13,7 +13,7 @@ from pg.graph import EditSet, ProceduralGraph
 from pg.llm import make_llm
 from pg.refiner import build_prompt, propose_edits
 from pg.tracking import log_files, log_table
-from pg.trajectory import summarize, write_jsonl
+from pg.trajectory import episode_rows, summarize, write_jsonl
 
 
 def total_cost(usage: dict) -> float:
@@ -24,9 +24,11 @@ def tokens(usage: dict, prefix: str) -> int:
     return usage.get(f"{prefix}_input_tokens", 0) + usage.get(f"{prefix}_output_tokens", 0)
 
 
-def _validate(env: Environment, tasks: list[Task], graph: ProceduralGraph, cfg: Config, path: Path) -> dict:
+def _validate(env: Environment, tasks: list[Task], graph: ProceduralGraph, cfg: Config, path: Path,
+              episodes: list[dict], k: int) -> dict:
     trajectories = run_batch(env, tasks, graph, cfg)
     write_jsonl(path, trajectories)
+    episodes += episode_rows(trajectories, round=k, phase="val")
     return summarize(trajectories)
 
 
@@ -65,7 +67,8 @@ def evolve(
     log_path.write_text("")
 
     print(f"[round 0] validating initial graph ({init.summary()}) on {len(val)} val tasks", flush=True)
-    s = _validate(env, val, init, cfg, out_dir / "trajectories" / "round_0_val.jsonl")
+    episodes: list[dict] = []  # one row per train / val episode, logged to W&B every round
+    s = _validate(env, val, init, cfg, out_dir / "trajectories" / "round_0_val.jsonl", episodes, 0)
     if s["n_scored"] < min_scored:
         raise RuntimeError(f"only {s['n_scored']}/{len(val)} baseline validation episodes ran without error; "
                            "fix the harness first")
@@ -86,6 +89,7 @@ def evolve(
         print(f"[round {k}] rollout on {len(tasks)} train tasks", flush=True)
         trajectories = run_batch(env, tasks, current, cfg)
         write_jsonl(out_dir / "trajectories" / f"round_{k}_train.jsonl", trajectories)
+        episodes += episode_rows(trajectories, round=k, phase="train")
         batch_summary = summarize(trajectories)
 
         # Crashed / timed-out episodes are harness failures, not procedural evidence (same rule as summarize()).
@@ -113,7 +117,8 @@ def evolve(
             print(f"[round {k}] edits changed nothing ({len(warnings)} warnings); skipping validation", flush=True)
         no_data = False
         if not edits.is_empty() and not no_op:
-            val_summary = _validate(env, val, candidate, cfg, out_dir / "trajectories" / f"round_{k}_val.jsonl")
+            val_summary = _validate(env, val, candidate, cfg, out_dir / "trajectories" / f"round_{k}_val.jsonl",
+                                    episodes, k)
             # Crashes/timeouts must not read as a score, and a mean over a few survivors is not comparable.
             no_data = val_summary["n_scored"] < min_scored
             if no_data:
@@ -150,6 +155,7 @@ def evolve(
         if run:
             _log_round(run, k, entry, current, current_val, rejected, batch_summary, val_summary,
                        refiner_usage, cand_val, spent)
+            log_table(run, "episodes", episodes)  # cumulative, so a run that dies mid-way keeps its rows
 
         after = "n/a (empty edit set)" if cand_val is None else f"{cand_val:.3f}"
         verdict = "ACCEPTED" if accepted else "rejected"

@@ -51,6 +51,17 @@ def read_jsonl(path: str | Path) -> list[Trajectory]:
     return [Trajectory.model_validate_json(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
+def episode_rows(trajectories: list[Trajectory], **labels) -> list[dict]:
+    """One flat row per episode (scalars only: no steps, no guidance text) for tables and paired analysis.
+    `labels` name the condition, e.g. graph="none" or round=3, phase="val"."""
+    rows = []
+    for t in trajectories:
+        scalars = {k: v for k, v in t.metrics.items() if isinstance(v, (bool, int, float, str))}
+        rows.append({**labels, "task_id": t.task_id, "score": t.score, "success": t.success,
+                     "steps": len(t.steps), "error": t.error, **scalars, **t.usage})
+    return rows
+
+
 def summarize(trajectories: list[Trajectory]) -> dict:
     """Scores average over episodes that ran to completion; episodes that errored (crash, timeout) are
     counted separately so infrastructure failures are not reported as task failures."""

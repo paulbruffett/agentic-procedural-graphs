@@ -43,8 +43,9 @@ uv run pg evolve hotpotqa --init scratch --rounds 2 --batch 5 --val-n 10   # che
 uv run pg evolve hotpotqa --init scratch --rounds 5 --batch 10               # validates on the whole val split (50)
 uv run pg evolve finance  --init scratch --rounds 5 --batch 10               # whole val split (20)
 
-# comparison
+# comparison, then paired statistics over one or more eval run directories
 uv run pg eval finance --graphs none,graphs/finance_expert.json,graphs/evolved/finance/best.json
+uv run pg analyze runs/<stamp>-eval-finance --baseline none
 ```
 
 `eval` prints mean score, success rate, mean steps, solver vs guidance tokens (the guidance overhead), cost,
@@ -60,6 +61,38 @@ It refuses to start if that directory already holds a run (`evolution_log.jsonl`
 write elsewhere or `--overwrite` to replace it. A validation pass only counts when at least
 `Config.val_min_scored` (80%) of its episodes ran without error: below that the baseline aborts the run, and a
 candidate round is logged as no data (graph kept, nothing added to rejection memory).
+
+## Measuring whether a graph helps
+
+A rising validation score during `evolve` is not evidence: the gate keeps whichever candidate scored highest on a
+small val set, so the accepted graph's val score is biased upward. (On HotpotQA, val went 0.70 to 0.77 over five
+rounds while the 150-task test score did not move.) Judge a graph only on the untouched `test` split, against
+controls, paired by task:
+
+```bash
+uv run pg evolve enterprisearena --init scratch --rounds 5 --batch 10 --out graphs/evolved/ea-run3 --experiment ea-run3
+
+# none = no guidance; round_0.json = the edgeless skeleton, i.e. the guidance call with no procedural knowledge
+# (controls for "any extra LLM call helps"); the expert graph is the upper reference. Repeat this 2-3 times:
+# temperature is not sent, so the same seed can end differently from run to run.
+uv run pg eval enterprisearena --split test --experiment ea-run3 --graphs \
+  none,graphs/evolved/ea-run3/round_0.json,graphs/enterprisearena_expert.json,graphs/evolved/ea-run3/best.json
+
+# list exactly the eval directories of this experiment (a glob would also pick up older, non-comparable runs)
+uv run pg analyze runs/<stamp1>-eval-enterprisearena runs/<stamp2>-eval-enterprisearena \
+  --experiment ea-run3 --metrics months_survived,valuation_score,steps
+```
+
+`analyze` compares every graph with `--baseline` (default `none`) on the tasks both completed without error:
+- `success` is the primary metric (survival, for the finance scenarios), then `score`, then any `--metrics`.
+- Each row gives both means, the mean paired difference and a 95% bootstrap interval that resamples tasks.
+- With one run per graph, `success` also gets an exact McNemar p-value and the discordant counts (`+gained/-lost`).
+  Several run directories with the same graph are repeats: each task is averaged over them first, and McNemar is
+  omitted because repeated pairs are not independent.
+
+One `evolve` run is a single draw from a stochastic process, so a test win shows that *this* graph helps, not
+that evolution reliably finds such graphs; that needs several evolve runs. Twenty test seeds resolve large
+effects only (`pg gen-data enterprisearena --n-test 40` extends the split without changing the first twenty).
 
 ## What is not in this repository
 
@@ -94,7 +127,8 @@ uv sync --extra wandb        # then set PG_WANDB_PROJECT in .env (and `wandb log
 ```
 
 When `PG_WANDB_PROJECT` is set, every `eval` / `evolve` command creates one W&B run (metrics only, no LLM
-tracing), with the CLI args and `Config` as the run config:
+tracing), with the CLI args, `Config`, and the git commit (`git_sha`, `git_dirty`) as the run config. Pass
+`--experiment <name>` to `evolve`, `eval` and `analyze` to put their runs in one W&B group:
 - `evolve` logs one step per round:
   - `train/score`, `train/success_rate`
   - `val/score` (the graph kept after the round) and `val/candidate_score`
@@ -106,7 +140,12 @@ tracing), with the CLI args and `Config` as the run config:
   At the end it adds a `rounds` table (edits and rationale) and a `graph` artifact with `best.json` and the
   evolution log.
 - `eval` logs a per-graph summary (`<graph>/mean_score`, `success_rate`, `guidance_overhead`, `cost`, and
-  so on) and an `eval` comparison table.
+  so on) and an `eval` comparison table that includes each graph file's `graph_sha256`.
+- Both log an `episodes` table with one row per episode: task id, graph (or round and phase), score, success,
+  steps, error, tokens, cost, and the environment's scalar metrics (for EnterpriseArena: outcome, months
+  survived, valuation, equity raised, ...). It holds scalars only: guidance text, tool observations and
+  trajectories are never uploaded; they stay in the local JSONL files.
+- `analyze --experiment <name>` logs its `paired` table; without `--experiment` it only prints.
 
 Without the variable, nothing is imported or sent. Local files stay the source of truth either way.
 

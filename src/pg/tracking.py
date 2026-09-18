@@ -4,23 +4,37 @@ Enabled when PG_WANDB_PROJECT is set; requires `uv sync --extra wandb`. Local fi
 """
 from __future__ import annotations
 
+import subprocess
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import asdict
 from pathlib import Path
 
-from pg.config import Config
+from pg.config import ROOT, Config
+
+
+def provenance() -> dict:
+    """The commit a number came from, and whether the tree had uncommitted changes."""
+    def git(*args: str) -> str:
+        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+
+    return {"git_sha": git("rev-parse", "HEAD"), "git_dirty": bool(git("status", "--porcelain"))}
 
 
 def start_run(cfg: Config, job_type: str, name: str, extra: dict) -> AbstractContextManager:
-    """A wandb run context, or a no-op context yielding None when W&B is not configured."""
+    """A wandb run context, or a no-op context yielding None when W&B is not configured.
+    `extra["experiment"]`, if set, becomes the W&B group, so an evolve run, its evals and the analysis sit together."""
     if not cfg.wandb_project:
         return nullcontext()
     try:
         import wandb
     except ImportError as e:
         raise RuntimeError("PG_WANDB_PROJECT is set but wandb is not installed; run `uv sync --extra wandb`.") from e
-    config = {k: str(v) if isinstance(v, Path) else v for k, v in {**asdict(cfg), **extra}.items()}
-    return wandb.init(project=cfg.wandb_project, job_type=job_type, name=name, config=config)
+    def plain(v):  # wandb config wants JSON-able values
+        return [plain(x) for x in v] if isinstance(v, list) else str(v) if isinstance(v, Path) else v
+
+    config = {k: plain(v) for k, v in {**asdict(cfg), **extra, **provenance()}.items()}
+    return wandb.init(project=cfg.wandb_project, job_type=job_type, name=name, config=config,
+                      group=extra.get("experiment"), tags=[t for t in (job_type, extra.get("env")) if t])
 
 
 def log_table(run, key: str, rows: list[dict]) -> None:
