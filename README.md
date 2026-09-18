@@ -237,3 +237,8 @@ To be filled in after running with an API key.
   in the environment and never to copy task-specific entities, queries or answers into the graph. In early smoke
   runs it did copy them. The validation gate is the paper's defence against this, but our validation sets are
   far smaller than the paper's HotpotQA set (50 vs 1,000), so `evolve` validates on the whole val split by default.
+
+## License
+
+MIT (see [LICENSE](LICENSE)) for the code in this repository. It does not cover the EnterpriseArena / CFO-Env
+simulator or the HotpotQA data, which are not part of this repository and keep their own terms.
