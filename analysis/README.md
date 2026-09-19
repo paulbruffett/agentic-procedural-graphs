@@ -9,6 +9,7 @@ from here. Deleting `analysis/` must leave `pg evolve` / `pg eval` fully working
 | [`paired_comparison.py`](paired_comparison.py) | Is a graph really better? Paired statistics over one or more `pg eval` run directories (bootstrap CI over tasks, exact McNemar on success) |
 | [`graph_evolution.py`](graph_evolution.py) | How a graph changed over an evolve run: text diff, Mermaid per round, interactive timeline |
 | [`timeline_template.html`](timeline_template.html) | The timeline page `graph_evolution.py report` fills in (self-contained apart from the dagre layout library, loaded from a CDN) |
+| [`hotpotqa_environment.ipynb`](hotpotqa_environment.ipynb) | Notebook: build the HotpotQA environment, call its tools by hand, run the solver loop (scripted, then live), rank trajectories as `evolve` does, and build the refiner prompt, without any evolution machinery. Saved with outputs; re-running the live cells costs about a cent. `uv run --with jupyterlab jupyter lab analysis/` |
 | [`walkthrough.md`](walkthrough.md) | "Procedural Graphs Deep Dive": the concepts, then the codebase, following one real question through it |
 
 ## Watching a graph evolve
