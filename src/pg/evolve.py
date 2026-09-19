@@ -10,10 +10,10 @@ from pg.agent import run_batch
 from pg.config import Config
 from pg.envs.base import Environment, Task
 from pg.graph import EditSet, ProceduralGraph
-from pg.llm import make_llm
+from pg.llm import is_fatal, make_llm
 from pg.refiner import build_prompt, propose_edits
 from pg.tracking import log_files, log_table
-from pg.trajectory import episode_rows, summarize, write_jsonl
+from pg.trajectory import episode_rows, raise_if_fatal, summarize, write_jsonl
 
 
 def total_cost(usage: dict) -> float:
@@ -28,6 +28,7 @@ def _validate(env: Environment, tasks: list[Task], graph: ProceduralGraph, cfg: 
               episodes: list[dict], k: int) -> dict:
     trajectories = run_batch(env, tasks, graph, cfg)
     write_jsonl(path, trajectories)
+    raise_if_fatal(trajectories)
     episodes += episode_rows(trajectories, round=k, phase="val")
     return summarize(trajectories)
 
@@ -89,6 +90,7 @@ def evolve(
         print(f"[round {k}] rollout on {len(tasks)} train tasks", flush=True)
         trajectories = run_batch(env, tasks, current, cfg)
         write_jsonl(out_dir / "trajectories" / f"round_{k}_train.jsonl", trajectories)
+        raise_if_fatal(trajectories)
         episodes += episode_rows(trajectories, round=k, phase="train")
         batch_summary = summarize(trajectories)
 
@@ -106,6 +108,8 @@ def evolve(
                 raise RuntimeError("every train episode errored; nothing to show the refiner")
             edits, refiner_usage = propose_edits(refiner, prompt)
         except Exception as e:  # the rollout is already paid for: keep the graph and carry on
+            if is_fatal(e):  # ...unless no later call can succeed either
+                raise
             edits.rationale = f"refiner failed: {type(e).__name__}: {e}"
             print(f"[round {k}] {edits.rationale}", flush=True)
         candidate, warnings = current.apply(edits)

@@ -11,7 +11,7 @@ from pg.config import Config
 from pg.envs.base import Environment
 from pg.graph import ProceduralGraph
 from pg.tracking import log_table
-from pg.trajectory import episode_rows, summarize, write_jsonl
+from pg.trajectory import episode_rows, raise_if_fatal, summarize, write_jsonl
 
 
 def load_graph(spec: str) -> ProceduralGraph | None:
@@ -57,11 +57,12 @@ def evaluate(
         sha = None if spec == "none" else hashlib.sha256(Path(spec).read_bytes()).hexdigest()[:12]
         rows.append({"graph": spec, "graph_sha256": sha, **summarize(trajectories)})
         episodes += episode_rows(trajectories, graph=spec)
+        (out_dir / "metrics.json").write_text(json.dumps(rows, indent=2))  # after every graph: a stopped run stays analyzable
+        raise_if_fatal(trajectories)
         if run:
             for key, value in table_row(rows[-1]).items():
                 if key != "graph":
                     run.summary[f"{label}/{key}"] = value
-    (out_dir / "metrics.json").write_text(json.dumps(rows, indent=2))
     if run:
         log_table(run, "eval", [table_row(r) for r in rows])
         log_table(run, "episodes", episodes)  # scalars per episode, for paired analysis (see pg.analyze)

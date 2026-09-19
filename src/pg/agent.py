@@ -21,7 +21,7 @@ from pg.config import Config
 from pg.envs.base import Environment, Task
 from pg.graph import ProceduralGraph
 from pg.guidance import generate_guidance
-from pg.llm import add_usage, make_llm, usage_of
+from pg.llm import add_usage, is_fatal, make_llm, usage_of
 from pg.trajectory import Step, Trajectory
 
 NUDGE = "The task is not complete. Continue by calling tools."
@@ -137,7 +137,7 @@ def run_episode(
         "messages": opening(episode.pop_context_reset()), "steps": [], "guidance": "", "guidance_log": [],
         "usage": {}, "nudges": 0, "final_text": None, "done": False,
     }
-    error = None
+    error, fatal = None, False
     try:
         # Stream full state values so a mid-episode failure still leaves the last good state for scoring.
         limit = 3 * (env.max_steps + cfg.max_nudges) + 5
@@ -146,7 +146,7 @@ def run_episode(
             if deadline and time.monotonic() > deadline:  # one stuck episode must not stall a whole batch
                 raise TimeoutError(f"episode exceeded {cfg.episode_timeout_s}s")
     except Exception as e:
-        error = f"{type(e).__name__}: {e}"
+        error, fatal = f"{type(e).__name__}: {e}", is_fatal(e)
 
     result = episode.score()
     result["stopped_early"] = not episode.is_done()  # step cap, timeout or error, rather than a real ending
@@ -160,6 +160,7 @@ def run_episode(
         usage=state["usage"],
         guidance_log=state["guidance_log"],
         error=error,
+        fatal=fatal,
     )
 
 

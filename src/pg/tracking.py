@@ -17,7 +17,8 @@ def provenance() -> dict:
     def git(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
 
-    return {"git_sha": git("rev-parse", "HEAD"), "git_dirty": bool(git("status", "--porcelain"))}
+    # Dirty = uncommitted changes to tracked files, as in `git describe --dirty`; untracked files do not count.
+    return {"git_sha": git("rev-parse", "HEAD"), "git_dirty": bool(git("status", "--porcelain", "--untracked-files=no"))}
 
 
 def start_run(cfg: Config, job_type: str, name: str, extra: dict) -> AbstractContextManager:

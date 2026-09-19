@@ -23,6 +23,7 @@ class Trajectory(BaseModel):
     usage: dict = Field(default_factory=dict)  # solver_/guidance_ input_tokens, output_tokens, cost
     guidance_log: list[str] = Field(default_factory=list)
     error: str | None = None
+    fatal: bool = False  # the error was an API failure no later episode can recover from (see llm.is_fatal)
 
     def compact(self, max_obs: int = 200) -> str:
         """Short textual form for the refiner prompt."""
@@ -49,6 +50,15 @@ def write_jsonl(path: str | Path, trajectories: list[Trajectory]) -> None:
 
 def read_jsonl(path: str | Path) -> list[Trajectory]:
     return [Trajectory.model_validate_json(line) for line in Path(path).read_text().splitlines() if line.strip()]
+
+
+def raise_if_fatal(trajectories: list[Trajectory]) -> None:
+    """Stop the run after a batch hit a fatal API error. Call it after the batch has been written to disk, so
+    the episodes that did finish are kept."""
+    fatal = [t for t in trajectories if t.fatal]
+    if fatal:
+        raise RuntimeError(f"stopping: {len(fatal)}/{len(trajectories)} episodes hit a fatal API error "
+                           f"(bad key or out of credits): {fatal[0].error}")
 
 
 def episode_rows(trajectories: list[Trajectory], **labels) -> list[dict]:

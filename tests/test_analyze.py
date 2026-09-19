@@ -84,3 +84,32 @@ def test_evaluate_logs_episode_rows_and_graph_hash(tmp_path, monkeypatch):
         ("none", "t0"), ("none", "t1"), (str(graph), "t0"), (str(graph), "t1")]
     assert "text" not in json.dumps(tables["episodes"])  # guidance stays in the local trajectory files
     assert compare(load([tmp_path / "out"]), "none", ["success"])[0]["diff"] == 0.0
+
+
+def test_evaluate_stops_after_a_fatal_batch_but_keeps_what_finished(tmp_path, monkeypatch):
+    class Env:
+        name = "stub"
+
+        def tasks(self, split):
+            return [Task(id=f"t{i}", prompt="p") for i in range(2)]
+
+    calls = []
+
+    def run_batch(env, tasks, graph, cfg):
+        calls.append(graph)
+        if len(calls) == 1:
+            return [Trajectory(task_id=t.id, score=1.0, success=True) for t in tasks]
+        return [Trajectory(task_id="t0", score=1.0, success=True),
+                Trajectory(task_id="t1", error="APIStatusError: Error code: 402", fatal=True)]
+
+    monkeypatch.setattr(evl, "run_batch", run_batch)
+    for name in ("a", "b", "c"):
+        (tmp_path / f"{name}.json").write_text('{"name": "g"}')
+    specs = [str(tmp_path / f"{name}.json") for name in ("a", "b", "c")]
+
+    with pytest.raises(RuntimeError, match="1/2 episodes hit a fatal API error"):
+        evl.evaluate(Env(), "test", None, specs, Config(), tmp_path / "out")
+
+    assert len(calls) == 2  # the third graph was never started
+    (row,) = compare(load([tmp_path / "out"]), specs[0], ["success"])  # the stopped run is still analyzable
+    assert row["graph"] == specs[1] and row["tasks"] == 1

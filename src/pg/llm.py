@@ -43,6 +43,11 @@ def usage_of(msg: AIMessage) -> dict:
     }
 
 
+def is_fatal(e: Exception) -> bool:
+    """Bad credentials (401) or out of credits (402): no retry or later episode can succeed, so the run should stop."""
+    return getattr(e, "status_code", None) in (401, 402)
+
+
 def add_usage(total: dict, part: dict, prefix: str) -> dict:
     out = dict(total)
     for k, v in part.items():

@@ -134,6 +134,25 @@ def test_thin_validation_is_no_data_and_existing_run_is_not_overwritten(tmp_path
     ev.evolve(StubEnv(), init, Config(), rounds=1, batch=2, val_n=4, out_dir=tmp_path, overwrite=True)
 
 
+def test_out_of_credits_stops_the_run_after_writing_the_batch(tmp_path, monkeypatch):
+    def run_batch(env, tasks, graph, cfg):
+        if len(tasks) == 4:  # baseline validation is fine
+            return fake_run_batch(env, tasks, graph, cfg)
+        return [Trajectory(task_id=t.id, error="APIStatusError: Error code: 402", fatal=True) for t in tasks]
+
+    proposals = []
+    monkeypatch.setattr(ev, "run_batch", run_batch)
+    monkeypatch.setattr(ev, "make_llm", lambda *a, **k: None)
+    monkeypatch.setattr(ev, "propose_edits", lambda llm, prompt: proposals.append(prompt))
+
+    init = ProceduralGraph.skeleton("stub", [("search", "find")])
+    with pytest.raises(RuntimeError, match="fatal API error"):
+        ev.evolve(StubEnv(), init, Config(), rounds=5, batch=2, val_n=4, out_dir=tmp_path)
+
+    assert not proposals  # stopped in round 1, before the refiner and before four more useless rounds
+    assert (tmp_path / "trajectories" / "round_1_train.jsonl").exists() and (tmp_path / "best.json").exists()
+
+
 def test_wandb_disabled_by_default():
     from pg.tracking import start_run
 

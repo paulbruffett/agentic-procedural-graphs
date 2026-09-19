@@ -134,3 +134,22 @@ def test_nudge_when_text_not_accepted(tmp_path, monkeypatch):
     t = run_episode(HotpotQAEnv(cfg(tmp_path)), TASK, None, cfg(tmp_path), solver)
     assert [s.tool for s in t.steps] == ["finish"] and t.score == 1.0
     assert solver.seen[1][-1].content == NUDGE
+
+
+class OutOfCredits(Exception):
+    status_code = 402  # shaped like openai.APIStatusError
+
+
+class FailingModel(ScriptedModel):
+    failure: Exception = None
+
+    def _generate(self, messages, *args, **kwargs):
+        raise self.failure
+
+
+def test_fatal_api_errors_are_flagged_and_other_errors_are_not(tmp_path):
+    env = HotpotQAEnv(cfg(tmp_path))
+    broke = run_episode(env, TASK, None, cfg(tmp_path), FailingModel(messages=iter([]), failure=OutOfCredits("402 no credits")))
+    assert broke.fatal and broke.error.startswith("OutOfCredits") and broke.steps == []
+    flaky = run_episode(env, TASK, None, cfg(tmp_path), FailingModel(messages=iter([]), failure=TimeoutError("slow")))
+    assert flaky.error.startswith("TimeoutError") and not flaky.fatal
