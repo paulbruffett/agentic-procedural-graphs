@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph evolution</title>
+<style>
+  :root { --bg:#fbfaf7; --panel:#fff; --ink:#1d1d1b; --muted:#6b6a65; --line:#d8d5cc; --kept:#9a978d;
+          --added:#1f8a7d; --revised:#c9820e; --removed:#c8374c; --accent:#3b5bdb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161614; --panel:#1f1f1c; --ink:#ecebe6; --muted:#a3a198;
+          --line:#3a3934; --kept:#77756c; --added:#4fc3b4; --revised:#f0b24a; --removed:#ef6f82; --accent:#8ea2ff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:1180px; margin:0 auto; padding:20px 16px 48px; }
+  h1 { font-size:20px; font-weight:600; margin:0 0 2px; } .sub { color:var(--muted); margin:0 0 14px; }
+  .bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  button { font:inherit; font-size:13px; padding:5px 11px; border:1px solid var(--line); border-radius:7px;
+           background:var(--panel); color:var(--ink); cursor:pointer; }
+  button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  button.rej { border-style:dashed; }
+  .verdict { margin:12px 0 2px; font-weight:600; } .verdict.ok { color:var(--added); } .verdict.no { color:var(--removed); }
+  .note { color:var(--muted); font-size:13px; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:var(--muted); margin:8px 0; }
+  .legend i { display:inline-block; width:20px; border-top:3px solid; vertical-align:middle; margin-right:4px; }
+  .grid { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:16px; align-items:start; }
+  @media (max-width: 900px) { .grid { grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  #stage { overflow-x:auto; padding:6px; } svg { display:block; }
+  .node rect, .node polygon { fill:var(--panel); stroke:var(--kept); stroke-width:1.2; }
+  .node text { font-size:12px; fill:var(--ink); text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+  .node.idle rect { stroke-dasharray:4 3; } .node.idle text { fill:var(--muted); }
+  .edge path.vis { fill:none; stroke:var(--kept); stroke-width:1.4; }
+  .edge path.hit { fill:none; stroke:transparent; stroke-width:14; cursor:pointer; } .node { cursor:pointer; }
+  .added path.vis, .added rect, .added polygon { stroke:var(--added); stroke-width:2.6; }
+  .revised path.vis, .revised rect, .revised polygon { stroke:var(--revised); stroke-width:2.6; }
+  .removed path.vis, .removed rect, .removed polygon { stroke:var(--removed); stroke-width:2; stroke-dasharray:6 4; }
+  .sel path.vis, .sel rect, .sel polygon { stroke:var(--accent) !important; stroke-width:3.2; }
+  h2 { font-size:13px; font-weight:600; color:var(--muted); margin:0 0 6px; text-transform:none; }
+  .k { font-size:12px; color:var(--muted); margin-top:9px; } .v { white-space:pre-wrap; }
+  .was { color:var(--muted); text-decoration:line-through; white-space:pre-wrap; }
+  code { font:12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #spark text { font-size:11px; fill:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Graph evolution</h1>
+  <p class="sub">Each round shows what the refiner proposed, coloured against the graph before it. Click an edge or node to read it. Arrow keys step through rounds.</p>
+  <div class="bar" id="rounds"></div>
+  <div class="verdict" id="verdict"></div>
+  <div class="note" id="note"></div>
+  <div class="legend">
+    <span><i style="border-color:var(--added)"></i>added this round</span>
+    <span><i style="border-color:var(--revised)"></i>revised this round</span>
+    <span><i style="border-color:var(--removed); border-top-style:dashed"></i>removed this round</span>
+    <span><i style="border-color:var(--kept)"></i>unchanged</span>
+  </div>
+  <div class="grid">
+    <div class="card" id="stage"><svg id="svg"></svg></div>
+    <div>
+      <div class="card" style="margin-bottom:12px"><h2>Validation score by round</h2><svg id="spark" width="100%" height="92"></svg></div>
+      <div class="card" style="margin-bottom:12px"><h2>Selected</h2><div id="detail" class="note">Nothing selected.</div></div>
+      <div class="card"><h2>Refiner's rationale</h2><div id="why" class="v" style="font-size:14px"></div></div>
+    </div>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+<script>
+const DATA = /*DATA*/null;
+const F = DATA.frames, NS = "http://www.w3.org/2000/svg", key = e => `${e.src}|${e.rel}|${e.dst}`;
+let cur = F.length - 1, sel = null;
+document.getElementById("title").textContent = "Graph evolution: " + DATA.run;
+
+// One layout over everything that ever existed, so nodes stay put while you step through rounds.
+const g = new dagre.graphlib.Graph({ multigraph: true });
+g.setGraph({ rankdir: "LR", nodesep: 26, ranksep: 70, marginx: 12, marginy: 12 });
+g.setDefaultEdgeLabel(() => ({}));
+F.forEach(f => f.nodes.forEach(n => { if (!g.hasNode(n.id)) g.setNode(n.id, { width: n.id.length * 7.2 + 28, height: 34 }); }));
+F.forEach(f => f.edges.forEach(e => { if (g.hasNode(e.src) && g.hasNode(e.dst) && !g.hasEdge(e.src, e.dst, key(e))) g.setEdge(e.src, e.dst, {}, key(e)); }));
+dagre.layout(g);
+
+function el(name, attrs, parent) { const x = document.createElementNS(NS, name); for (const a in attrs) x.setAttribute(a, attrs[a]); parent.appendChild(x); return x; }
+function curve(pts) {
+  let d = `M${pts[0].x},${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) d += ` Q${pts[i].x},${pts[i].y} ${(pts[i].x + pts[i + 1].x) / 2},${(pts[i].y + pts[i + 1].y) / 2}`;
+  const last = pts[pts.length - 1]; return d + ` L${last.x},${last.y}`;
+}
+function field(parent, name, value, was) {
+  if (!value && !was) return;
+  const k = document.createElement("div"); k.className = "k"; k.textContent = name; parent.appendChild(k);
+  if (was !== undefined && was !== value) { const w = document.createElement("div"); w.className = "was"; w.textContent = was || "(empty)"; parent.appendChild(w); }
+  const v = document.createElement("div"); v.className = "v"; v.textContent = value || "(empty)"; parent.appendChild(v);
+}
+function showDetail(item, isEdge) {
+  const d = document.getElementById("detail"); d.className = ""; d.innerHTML = "";
+  const h = document.createElement("code"); h.textContent = isEdge ? `${item.src} --${item.rel}--> ${item.dst}` : `[${item.id}] ${item.type}`; d.appendChild(h);
+  const s = document.createElement("div"); s.className = "note"; s.textContent = item.status === "kept" ? "unchanged this round" : item.status + " this round"; d.appendChild(s);
+  if (isEdge) ["condition", "guidance", "pitfalls"].forEach(f => field(d, f, item[f], item.was ? item.was[f] : undefined));
+  else field(d, "description", item.description);
+}
+function draw() {
+  const f = F[cur], svg = document.getElementById("svg"); svg.innerHTML = "";
+  const gg = g.graph(); svg.setAttribute("width", gg.width); svg.setAttribute("height", gg.height); svg.setAttribute("viewBox", `0 0 ${gg.width} ${gg.height}`);
+  const defs = el("defs", {}, svg), m = el("marker", { id: "arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerUnits: "userSpaceOnUse", markerWidth: 11, markerHeight: 11, orient: "auto-start-reverse" }, defs);
+  el("path", { d: "M0,0 L10,5 L0,10 z", fill: "context-stroke" }, m);
+  const edgeLayer = el("g", {}, svg), nodeLayer = el("g", {}, svg), live = new Set();
+  f.edges.forEach(e => {
+    const le = g.edge(e.src, e.dst, key(e)); if (!le) return;
+    live.add(e.src); live.add(e.dst);
+    const grp = el("g", { class: `edge ${e.status}` + (sel === key(e) ? " sel" : "") }, edgeLayer), d = curve(le.points);
+    el("path", { class: "vis", d, "marker-end": "url(#arrow)" }, grp); el("path", { class: "hit", d }, grp);
+    grp.addEventListener("click", () => { sel = key(e); draw(); showDetail(e, true); });
+  });
+  f.nodes.forEach(n => {
+    const p = g.node(n.id), w = p.width, h = p.height, x = p.x - w / 2, y = p.y - h / 2;
+    const grp = el("g", { class: `node ${n.status}` + (live.has(n.id) || n.status !== "kept" ? "" : " idle") + (sel === n.id ? " sel" : "") }, nodeLayer);
+    if (n.type === "REASONING") el("polygon", { points: `${x + 10},${y} ${x + w - 10},${y} ${x + w},${p.y} ${x + w - 10},${y + h} ${x + 10},${y + h} ${x},${p.y}` }, grp);
+    else el("rect", { x, y, width: w, height: h, rx: n.type === "STATE" ? h / 2 : 5 }, grp);
+    el("text", { x: p.x, y: p.y }, grp).textContent = n.id;
+    grp.addEventListener("click", () => { sel = n.id; draw(); showDetail(n, false); });
+  });
+  const v = document.getElementById("verdict"), fmt = x => x == null ? "n/a" : x.toFixed(3);
+  v.className = "verdict" + (f.accepted === true ? " ok" : f.accepted === false && f.val_after != null ? " no" : "");
+  v.textContent = f.accepted == null ? `Round 0: initial graph, validation ${fmt(f.val_after)}`
+    : f.val_after == null ? `Round ${f.round}: nothing was validated` : `Round ${f.round}: ${f.accepted ? "ACCEPTED" : "rejected"}, validation ${fmt(f.val_before)} → ${fmt(f.val_after)}`;
+  document.getElementById("note").textContent = (f.recorded ? "" : "This run predates saved proposals, so the rejected candidate cannot be shown; this is the graph that was kept. ") + (f.accepted == null ? "" : f.summary);
+  document.getElementById("why").textContent = f.rationale || "—";
+  document.querySelectorAll("#rounds button").forEach((b, i) => b.classList.toggle("on", i === cur));
+  spark();
+}
+function spark() {
+  const s = document.getElementById("spark"); s.innerHTML = "";
+  const W = s.clientWidth || 300, H = 92, vals = F.map(f => f.val_after).filter(x => x != null), lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+  const X = i => 16 + i * (W - 32) / Math.max(F.length - 1, 1), Y = v => 14 + (1 - (v - lo) / span) * (H - 40);
+  let best = null, d = "";
+  F.forEach((f, i) => { if (f.accepted !== false && f.val_after != null) best = f.val_after; if (best != null) d += (d ? " L" : "M") + `${X(i)},${Y(best)}`; });
+  el("path", { d, fill: "none", stroke: "var(--kept)", "stroke-width": 1.5 }, s);
+  F.forEach((f, i) => {
+    if (f.val_after != null) el("circle", { cx: X(i), cy: Y(f.val_after), r: i === cur ? 6 : 4, fill: f.accepted === false ? "var(--panel)" : "var(--added)", stroke: f.accepted === false ? "var(--removed)" : "var(--added)", "stroke-width": 2 }, s);
+    el("text", { x: X(i), y: H - 6, "text-anchor": "middle" }, s).textContent = f.round;
+    if (i === cur && f.val_after != null) el("text", { x: X(i), y: Math.max(Y(f.val_after) - 9, 10), "text-anchor": "middle" }, s).textContent = f.val_after.toFixed(3);
+  });
+}
+const bar = document.getElementById("rounds");
+F.forEach((f, i) => { const b = document.createElement("button"); b.textContent = "Round " + f.round; if (f.accepted === false) b.className = "rej"; b.onclick = () => { cur = i; sel = null; draw(); }; bar.appendChild(b); });
+document.addEventListener("keydown", e => { const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0; if (step) { cur = Math.min(F.length - 1, Math.max(0, cur + step)); sel = null; draw(); } });
+window.addEventListener("resize", spark);
+draw();
+</script>
+</body>
+</html>

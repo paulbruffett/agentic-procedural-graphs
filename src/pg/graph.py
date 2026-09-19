@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
@@ -73,6 +74,22 @@ class EditSet(BaseModel):
 
     def is_empty(self) -> bool:
         return not (self.add_nodes or self.add_edges or self.delete_nodes or self.delete_edges)
+
+
+@dataclass
+class GraphDiff:
+    """What changed from one graph to another. Revised = same id / (src, rel, dst) key, different content;
+    each revised entry is an (old, new) pair. Falsy when nothing changed."""
+
+    added_nodes: list[Node] = field(default_factory=list)
+    removed_nodes: list[Node] = field(default_factory=list)
+    revised_nodes: list[tuple[Node, Node]] = field(default_factory=list)
+    added_edges: list[Edge] = field(default_factory=list)
+    removed_edges: list[Edge] = field(default_factory=list)
+    revised_edges: list[tuple[Edge, Edge]] = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return any(vars(self).values())
 
 
 class ProceduralGraph(BaseModel):
@@ -156,6 +173,19 @@ class ProceduralGraph(BaseModel):
             if e.pitfalls:
                 lines.append(f"      pitfalls: {e.pitfalls}")
         return "\n".join(lines)
+
+    # ---- comparison ---------------------------------------------------
+    def diff(self, other: "ProceduralGraph") -> GraphDiff:
+        """Changes that turn this graph into `other`, ignoring the order of nodes and edges."""
+        d = GraphDiff()
+        for mine, theirs, added, removed, revised in (
+            ({n.id: n for n in self.nodes}, {n.id: n for n in other.nodes}, d.added_nodes, d.removed_nodes, d.revised_nodes),
+            ({e.key(): e for e in self.edges}, {e.key(): e for e in other.edges}, d.added_edges, d.removed_edges, d.revised_edges),
+        ):
+            added += [v for k, v in theirs.items() if k not in mine]
+            removed += [v for k, v in mine.items() if k not in theirs]
+            revised += [(v, theirs[k]) for k, v in mine.items() if k in theirs and theirs[k] != v]
+        return d
 
     # ---- mutation -----------------------------------------------------
     def apply(self, edits: EditSet) -> tuple["ProceduralGraph", list[str]]:

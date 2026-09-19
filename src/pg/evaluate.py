@@ -65,7 +65,7 @@ def evaluate(
                     run.summary[f"{label}/{key}"] = value
     if run:
         log_table(run, "eval", [table_row(r) for r in rows])
-        log_table(run, "episodes", episodes)  # scalars per episode, for paired analysis (see pg.analyze)
+        log_table(run, "episodes", episodes)  # scalars per episode, for paired analysis (see analysis/paired_comparison.py)
     return rows
 
 

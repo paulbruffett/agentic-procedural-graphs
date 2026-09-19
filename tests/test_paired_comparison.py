@@ -4,7 +4,7 @@ import json
 import pytest
 
 from pg import evaluate as evl
-from pg.analyze import compare, load, mcnemar_exact, paired_bootstrap
+from analysis.paired_comparison import compare, load, mcnemar_exact, paired_bootstrap
 from pg.config import Config
 from pg.envs.base import Task
 from pg.trajectory import Step, Trajectory, episode_rows, write_jsonl

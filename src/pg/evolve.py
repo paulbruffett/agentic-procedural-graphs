@@ -9,7 +9,7 @@ from pathlib import Path
 from pg.agent import run_batch
 from pg.config import Config
 from pg.envs.base import Environment, Task
-from pg.graph import EditSet, ProceduralGraph
+from pg.graph import EditSet, GraphDiff, ProceduralGraph
 from pg.llm import is_fatal, make_llm
 from pg.refiner import build_prompt, propose_edits
 from pg.tracking import log_files, log_table
@@ -33,10 +33,12 @@ def _validate(env: Environment, tasks: list[Task], graph: ProceduralGraph, cfg: 
     return summarize(trajectories)
 
 
-def _canonical(graph: ProceduralGraph) -> tuple:
-    """Order-independent identity of a graph, to spot edit sets that changed nothing."""
-    return (sorted(json.dumps(n.model_dump(mode="json"), sort_keys=True) for n in graph.nodes),
-            sorted(json.dumps(e.model_dump(mode="json"), sort_keys=True) for e in graph.edges))
+def _edge_changes(diff: GraphDiff, k: int) -> list[dict]:
+    """One row per edge the round's proposal added, revised or removed (for the W&B `edge_changes` table)."""
+    changes = ([("added", e) for e in diff.added_edges] + [("revised", new) for _, new in diff.revised_edges]
+               + [("removed", e) for e in diff.removed_edges])
+    return [{"round": k, "change": change, "src": e.src, "rel": e.rel.value, "dst": e.dst,
+             "condition": e.condition, "guidance": e.guidance, "pitfalls": e.pitfalls} for change, e in changes]
 
 
 def _append(path: Path, entry: dict) -> None:
@@ -61,6 +63,7 @@ def evolve(
     refiner = make_llm(cfg.refiner_model, cfg.temperature)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "prompts").mkdir(exist_ok=True)
+    (out_dir / "edits").mkdir(exist_ok=True)
     log_path = out_dir / "evolution_log.jsonl"
     if log_path.exists() and not overwrite:
         raise FileExistsError(f"{out_dir} already holds an evolution run; pass --out <dir> or --overwrite")
@@ -84,6 +87,7 @@ def evolve(
     print(f"[round 0] val {current_val:.3f}", flush=True)
     rejected: list[dict] = []
     history: list[dict] = []
+    edge_changes: list[dict] = []  # what each round proposed, for W&B
 
     for k in range(1, rounds + 1):
         tasks = [train[((k - 1) * batch + i) % len(train)] for i in range(min(batch, len(train)))]
@@ -112,11 +116,14 @@ def evolve(
                 raise
             edits.rationale = f"refiner failed: {type(e).__name__}: {e}"
             print(f"[round {k}] {edits.rationale}", flush=True)
+        # Kept for every round, accepted or not: with round_{k-1}.json it rebuilds the candidate that was tried.
+        (out_dir / "edits" / f"round_{k}.json").write_text(edits.model_dump_json(indent=2))
         candidate, warnings = current.apply(edits)
         print(f"[round {k}] refiner proposed: {edits.summary()}", flush=True)
 
         cand_val, val_summary = None, {}
-        no_op = _canonical(candidate) == _canonical(current)  # e.g. every edge dropped for unknown endpoints
+        proposed = current.diff(candidate)
+        no_op = not proposed  # e.g. every edge dropped for unknown endpoints
         if no_op and not edits.is_empty():
             print(f"[round {k}] edits changed nothing ({len(warnings)} warnings); skipping validation", flush=True)
         no_data = False
@@ -160,6 +167,8 @@ def evolve(
             _log_round(run, k, entry, current, current_val, rejected, batch_summary, val_summary,
                        refiner_usage, cand_val, spent)
             log_table(run, "episodes", episodes)  # cumulative, so a run that dies mid-way keeps its rows
+            edge_changes += [{**row, "accepted": accepted} for row in _edge_changes(proposed, k)]
+            log_table(run, "edge_changes", edge_changes)
 
         after = "n/a (empty edit set)" if cand_val is None else f"{cand_val:.3f}"
         verdict = "ACCEPTED" if accepted else "rejected"

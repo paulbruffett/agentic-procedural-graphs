@@ -1,5 +1,8 @@
 """Paired comparison of graph conditions from one or more `pg eval` run directories.
 
+    uv run python -m analysis.paired_comparison runs/<stamp>-eval-<env> [more run dirs = repeats] \\
+        [--baseline none] [--metrics months_survived,steps] [--experiment <W&B group>]
+
 Conditions are compared on the tasks they share, because every condition ran the same tasks (same simulator seeds /
 questions) and task difficulty varies far more than the effect we are looking for. Several run directories with the
 same graph spec are repeats: each (graph, task) cell is averaged over them, and tasks stay the unit of resampling.
@@ -9,14 +12,18 @@ Errored episodes (crash, timeout) are dropped, as in `summarize()`.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import random
 from collections import defaultdict
 from math import comb
+from datetime import datetime
 from pathlib import Path
 from statistics import mean
 
+from pg.config import Config
 from pg.evaluate import label_of
+from pg.tracking import log_table, start_run
 from pg.trajectory import episode_rows, read_jsonl
 
 Cells = dict[str, dict[str, list[dict]]]  # graph spec -> task id -> one episode row per repeat
@@ -93,3 +100,23 @@ def format_report(rows: list[dict]) -> str:
             f"{_num(r['baseline_mean']):>12} {_num(r['diff'], '+'):>13} {ci:>29} {p:>18}"
         )
     return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("run_dirs", type=Path, nargs="+", help="runs/<stamp>-eval-<env> directories; several = repeats")
+    p.add_argument("--baseline", default="none", help="graph spec every other graph is compared against")
+    p.add_argument("--metrics", default="", help="extra episode metrics, comma-separated (success and score are always reported)")
+    p.add_argument("--experiment", default=None, help="also log the table to W&B, in this group")
+    args = p.parse_args(argv)
+    metrics = ["success", "score"] + [m.strip() for m in args.metrics.split(",") if m.strip()]
+    rows = compare(load(args.run_dirs), args.baseline, metrics)
+    print(format_report(rows))
+    if args.experiment:  # analysis is cheap and re-run often, so it is only logged when it belongs to an experiment
+        with start_run(Config.from_env(), "analyze", f"analyze-{datetime.now():%Y%m%d-%H%M%S}", vars(args)) as run:
+            if run:
+                log_table(run, "paired", rows)
+
+
+if __name__ == "__main__":
+    main()

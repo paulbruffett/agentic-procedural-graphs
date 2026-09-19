@@ -45,7 +45,7 @@ uv run pg evolve finance  --init scratch --rounds 5 --batch 10               # w
 
 # comparison, then paired statistics over one or more eval run directories
 uv run pg eval finance --graphs none,graphs/finance_expert.json,graphs/evolved/finance/best.json
-uv run pg analyze runs/<stamp>-eval-finance --baseline none
+uv run python -m analysis.paired_comparison runs/<stamp>-eval-finance --baseline none
 ```
 
 `eval` prints mean score, success rate, mean steps, solver vs guidance tokens (the guidance overhead), cost,
@@ -53,6 +53,7 @@ and counts of episodes stopped early or errored. Trajectories (including every g
 
 `evolve` writes to `graphs/evolved/<env>/`:
 - `round_k.json` and `best.json`
+- `edits/round_k.json`: the refiner's proposal for each round, accepted or not
 - `evolution_log.jsonl`: batch score, val before/after, accepted?, edits, rationale, and cost for each round
 - `prompts/round_k.txt`: the exact refiner prompt, including rejection memory
 - `trajectories/`
@@ -79,11 +80,11 @@ uv run pg eval enterprisearena --split test --experiment ea-run3 --graphs \
   none,graphs/evolved/ea-run3/round_0.json,graphs/enterprisearena_expert.json,graphs/evolved/ea-run3/best.json
 
 # list exactly the eval directories of this experiment (a glob would also pick up older, non-comparable runs)
-uv run pg analyze runs/<stamp1>-eval-enterprisearena runs/<stamp2>-eval-enterprisearena \
+uv run python -m analysis.paired_comparison runs/<stamp1>-eval-enterprisearena runs/<stamp2>-eval-enterprisearena \
   --experiment ea-run3 --metrics months_survived,valuation_score,steps
 ```
 
-`analyze` compares every graph with `--baseline` (default `none`) on the tasks both completed without error:
+`analysis/paired_comparison.py` compares every graph with `--baseline` (default `none`) on the tasks both completed without error:
 - `success` is the primary metric (survival, for the finance scenarios), then `score`, then any `--metrics`.
 - Each row gives both means, the mean paired difference and a 95% bootstrap interval that resamples tasks.
 - With one run per graph, `success` also gets an exact McNemar p-value and the discordant counts (`+gained/-lost`).
@@ -120,6 +121,10 @@ The other two scenarios (finance, HotpotQA) do not depend on it.
 simulator cannot be shared). It is cloned into `private/` and symlinked into place with `sh private/link.sh`;
 new runs and evolved graphs are committed there, never here.
 
+To see how the graph changed round by round (text diff, a Mermaid diagram per round, an interactive timeline), see
+[`analysis/`](analysis/README.md). That folder holds everything that is not needed to run the framework, including
+a [code walkthrough](analysis/walkthrough.md).
+
 ### W&B metrics (optional)
 
 ```bash
@@ -128,7 +133,7 @@ uv sync --extra wandb        # then set PG_WANDB_PROJECT in .env (and `wandb log
 
 When `PG_WANDB_PROJECT` is set, every `eval` / `evolve` command creates one W&B run (metrics only, no LLM
 tracing), with the CLI args, `Config`, and the git commit (`git_sha`, `git_dirty`) as the run config. Pass
-`--experiment <name>` to `evolve`, `eval` and `analyze` to put their runs in one W&B group:
+`--experiment <name>` to `evolve`, `eval` and `analysis.paired_comparison` to put their runs in one W&B group:
 - `evolve` logs one step per round:
   - `train/score`, `train/success_rate`
   - `val/score` (the graph kept after the round) and `val/candidate_score`
@@ -137,15 +142,16 @@ tracing), with the CLI args, `Config`, and the git commit (`git_sha`, `git_dirty
   - solver, guidance and refiner tokens
   - `cost/round` and `cost/total`
 
-  At the end it adds a `rounds` table (edits and rationale) and a `graph` artifact with `best.json` and the
-  evolution log.
+  Every round it also updates an `edge_changes` table: one row per edge the round's proposal added, revised or
+  removed, with its text and whether the round was accepted. At the end it adds a `rounds` table (edits and
+  rationale) and a `graph` artifact with `best.json` and the evolution log.
 - `eval` logs a per-graph summary (`<graph>/mean_score`, `success_rate`, `guidance_overhead`, `cost`, and
   so on) and an `eval` comparison table that includes each graph file's `graph_sha256`.
 - Both log an `episodes` table with one row per episode: task id, graph (or round and phase), score, success,
   steps, error, tokens, cost, and the environment's scalar metrics (for EnterpriseArena: outcome, months
   survived, valuation, equity raised, ...). It holds scalars only: guidance text, tool observations and
   trajectories are never uploaded; they stay in the local JSONL files.
-- `analyze --experiment <name>` logs its `paired` table; without `--experiment` it only prints.
+- `analysis.paired_comparison --experiment <name>` logs its `paired` table; without `--experiment` it only prints.
 
 Without the variable, nothing is imported or sent. Local files stay the source of truth either way.
 

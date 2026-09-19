@@ -75,6 +75,12 @@ def test_accept_then_reject_then_memory_in_prompt(tmp_path, monkeypatch):
     assert GOOD.key() in {e.key() for e in best.edges}
     assert ProceduralGraph.load(tmp_path / "best.json") == best
 
+    # every round's proposal is kept, accepted or not, so a rejected candidate can be rebuilt and inspected
+    rejected = EditSet.model_validate_json((tmp_path / "edits" / "round_2.json").read_text())
+    assert rejected.rationale == "remove it" and len(rejected.delete_edges) == 1
+    assert [(r["round"], r["change"], r["accepted"]) for r in run.tables["edge_changes"]] == [
+        (1, "added", True), (2, "removed", False)]
+
     assert "(empty)" in (tmp_path / "prompts" / "round_2.txt").read_text()
     round3 = (tmp_path / "prompts" / "round_3.txt").read_text()
     assert "round 2: delete edges: Start-LEADS_TO->search | val 1.000 -> 0.500" in round3

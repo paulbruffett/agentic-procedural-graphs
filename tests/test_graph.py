@@ -68,3 +68,24 @@ def test_skeleton_has_no_edges():
     g = ProceduralGraph.skeleton("s", [("search", "find"), ("finish", "answer")])
     assert [n.id for n in g.nodes] == ["Start", "End", "search", "finish"]
     assert g.edges == []
+
+
+def test_diff_reports_added_removed_revised_and_ignores_order():
+    g = chain()
+    assert not g.diff(g)
+    shuffled = ProceduralGraph(name="chain", nodes=g.nodes[::-1], edges=g.edges[::-1])
+    assert not g.diff(shuffled)  # same content in another order is not a change
+
+    edits = EditSet(
+        add_nodes=[Node(id="check", type=NodeType.REASONING)],
+        add_edges=[Edge(src="a", rel=Relation.LEADS_TO, dst="check"),
+                   Edge(src="a", rel=Relation.LEADS_TO, dst="b", guidance="revised")],
+        delete_edges=[EdgeRef(src="c", rel=Relation.LEADS_TO, dst="End")],
+        delete_nodes=["z"],
+    )
+    d = g.diff(g.apply(edits)[0])
+    assert d and [n.id for n in d.added_nodes] == ["check"] and [n.id for n in d.removed_nodes] == ["z"]
+    assert [e.key() for e in d.added_edges] == [("a", "LEADS_TO", "check")]
+    assert [e.key() for e in d.removed_edges] == [("c", "LEADS_TO", "End")]
+    ((old, new),) = d.revised_edges
+    assert (old.guidance, new.guidance) == ("a then b", "revised")

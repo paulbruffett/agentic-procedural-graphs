@@ -1,18 +1,17 @@
-"""`pg` command line: gen-data | evolve | eval | analyze."""
+"""`pg` command line: gen-data | evolve | eval."""
 from __future__ import annotations
 
 import argparse
 from datetime import datetime
 from pathlib import Path
 
-from pg.analyze import compare, format_report, load
 from pg.config import Config
 from pg.envs import make_env
 from pg.envs.base import Environment
 from pg.evaluate import evaluate, format_table
 from pg.evolve import evolve
 from pg.graph import ProceduralGraph
-from pg.tracking import log_table, start_run
+from pg.tracking import start_run
 
 ENVS = ["finance", "hotpotqa", "enterprisearena"]
 
@@ -52,16 +51,6 @@ def run_eval(args: argparse.Namespace, cfg: Config, env: Environment, run, stamp
     print(f"trajectories and metrics in {out}")
 
 
-def run_analyze(args: argparse.Namespace, cfg: Config, stamp: str) -> None:
-    metrics = ["success", "score"] + [m.strip() for m in args.metrics.split(",") if m.strip()]
-    rows = compare(load(args.run_dirs), args.baseline, metrics)
-    print(format_report(rows))
-    if args.experiment:  # analysis is cheap and re-run often, so it is only logged when it belongs to an experiment
-        with start_run(cfg, "analyze", f"analyze-{stamp}", vars(args)) as run:
-            if run:
-                log_table(run, "paired", rows)
-
-
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="pg", description="Procedural Graphs reference implementation")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -89,14 +78,8 @@ def main(argv: list[str] | None = None) -> None:
     v.add_argument("--n", type=int, default=None, help="default: whole split")
     v.add_argument("--graphs", default="none", help="comma-separated: none,graphs/x.json,...")
 
-    a = sub.add_parser("analyze", help="paired comparison of the graphs in one or more eval run directories")
-    a.add_argument("run_dirs", type=Path, nargs="+", help="runs/<stamp>-eval-<env> directories; several = repeats")
-    a.add_argument("--baseline", default="none", help="graph spec every other graph is compared against")
-    a.add_argument("--metrics", default="", help="extra episode metrics, comma-separated (success and score are always reported)")
-
     for sp in (e, v):
         sp.add_argument("--concurrency", type=int, default=None)
-    for sp in (e, v, a):
         sp.add_argument("--experiment", default=None, help="W&B group, to keep an evolve run, its evals and analysis together")
 
     args = p.parse_args(argv)
@@ -108,9 +91,6 @@ def main(argv: list[str] | None = None) -> None:
         return gen_data(args, cfg)
 
     stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
-    if args.cmd == "analyze":
-        return run_analyze(args, cfg, stamp)
-
     env = make_env(args.env, cfg)
     with start_run(cfg, args.cmd, f"{args.cmd}-{env.name}-{stamp}", vars(args)) as run:
         if args.cmd == "evolve":
