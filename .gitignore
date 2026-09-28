@@ -12,3 +12,4 @@ data
 runs
 graphs/evolved
 private
+.ipynb_checkpoints/

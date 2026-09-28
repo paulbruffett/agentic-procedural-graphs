@@ -123,7 +123,7 @@ new runs and evolved graphs are committed there, never here.
 
 To see how the graph changed round by round (text diff, a Mermaid diagram per round, an interactive timeline), see
 [`analysis/`](analysis/README.md). That folder holds everything that is not needed to run the framework, including
-a [code walkthrough](analysis/walkthrough.md).
+a code walkthrough as an executable notebook ([`analysis/walkthrough.ipynb`](analysis/walkthrough.ipynb)) with the long-horizon results in [`analysis/walkthrough.md`](analysis/walkthrough.md).
 
 ### W&B metrics (optional)
 
