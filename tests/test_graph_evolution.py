@@ -1,7 +1,7 @@
 """analysis/graph_evolution.py: frames, text diff, Mermaid and the report files (no network)."""
 import json
 
-from analysis.graph_evolution import load_frames, report, text_diff, to_mermaid
+from analysis.graph_evolution import graph_to_mermaid, load_frames, report, text_diff, to_mermaid
 from pg.graph import Edge, EdgeRef, EditSet, Node, NodeType, ProceduralGraph, Relation
 
 E1 = Edge(src="Start", rel=Relation.LEADS_TO, dst="search", guidance="search first")
@@ -60,3 +60,10 @@ def test_mermaid_and_report_files(tmp_path):
 def test_text_diff_of_identical_graphs():
     g = ProceduralGraph.skeleton("demo", [("search", "find")])
     assert text_diff(g.diff(g)) == "(no changes)"
+
+
+def test_graph_to_mermaid_shapes_and_active_node():
+    g = ProceduralGraph.skeleton("demo", [("search", "find")]).apply(EditSet(add_edges=[E1]))[0]
+    m = graph_to_mermaid(g, active="search")
+    assert m.startswith("flowchart LR") and '(["Start"])' in m and '["search"]' in m and "-->|LEADS_TO|" in m
+    assert "class n2 active" in m and "|LEADS_TO|" not in graph_to_mermaid(g, labels=False)

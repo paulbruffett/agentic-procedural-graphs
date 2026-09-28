@@ -104,6 +104,16 @@ COLORS = {"added": "#2a9d8f", "revised": "#e9a23b", "removed": "#d1495b"}
 SHAPES = {NodeType.STATE.value: '(["{}"])', NodeType.ACTION.value: '["{}"]', NodeType.REASONING.value: '{{{{"{}"}}}}'}
 
 
+def graph_to_mermaid(graph: ProceduralGraph, active: str | None = None, labels: bool = True) -> str:
+    """Flowchart of a graph as it is (no change colouring). `active` highlights one node, e.g. the localized one."""
+    ids = {n.id: f"n{i}" for i, n in enumerate(graph.nodes)}  # mermaid reserves words such as `end`
+    lines = ["flowchart LR"] + [f"  {ids[n.id]}{SHAPES[n.type.value].format(n.id)}" for n in graph.nodes]
+    lines += [f"  {ids[e.src]} -->{f'|{e.rel.value}|' if labels else ''} {ids[e.dst]}" for e in graph.edges if e.src in ids and e.dst in ids]
+    if active in ids:
+        lines += [f"  classDef active stroke:{COLORS['added']},stroke-width:3px", f"  class {ids[active]} active"]
+    return "\n".join(lines)
+
+
 def to_mermaid(frame: dict) -> str:
     """Flowchart of one frame; this round's changes are coloured. Nodes that no edge touches are left out."""
     used = {e[end] for e in frame["edges"] for end in ("src", "dst")}
