@@ -7,9 +7,9 @@ from here. Deleting `analysis/` must leave `pg evolve` / `pg eval` fully working
 | File | What it is |
 |---|---|
 | [`paired_comparison.py`](paired_comparison.py) | Is a graph really better? Paired statistics over one or more `pg eval` run directories (bootstrap CI over tasks, exact McNemar on success) |
-| [`graph_evolution.py`](graph_evolution.py) | How a graph changed over an evolve run: text diff, Mermaid per round, interactive timeline |
+| [`graph_evolution.py`](graph_evolution.py) | How a graph changed over an evolve run: text diff, Mermaid per round, interactive timeline; also `graph_to_svg` / `graph_to_mermaid` for drawing any graph |
 | [`timeline_template.html`](timeline_template.html) | The timeline page `graph_evolution.py report` fills in (self-contained apart from the dagre layout library, loaded from a CDN) |
-| [`walkthrough.ipynb`](walkthrough.ipynb) | **Start here.** The walkthrough as an executable notebook: the conceptual map, then every mechanism exercised by a cell on HotpotQA, ending with a real three-round evolution and its timeline. Saved with outputs. Sections 1–6, 8, 10–11 and 13 need no API key; the live sections cost about $1.50 in total (the evolve cell reuses its run on re-open). `uv run --with jupyterlab jupyter lab` from the repo root |
+| [`walkthrough.ipynb`](walkthrough.ipynb) | **Start here.** The walkthrough as an executable notebook: the conceptual map, then every mechanism exercised by a cell on HotpotQA, ending with a real three-round evolution and its timeline. Saved with outputs. Sections 1–6, 8, 10–11 and 13 need no API key; the live sections cost about $1.50 in total (the evolve cell reuses its run on re-open). Graph diagrams are SVGs made with Graphviz: `brew install graphviz` (the `dot` binary; the Python package is a dev dependency); without it the notebook falls back to Mermaid blocks. `uv run --with jupyterlab jupyter lab` from the repo root |
 | [`walkthrough.md`](walkthrough.md) | What the notebook cannot run cheaply: the EnterpriseArena scenario and the results, including the from-scratch evolution that took test survival from 1/20 to 17/19 |
 
 ## Watching a graph evolve

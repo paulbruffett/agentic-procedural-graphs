@@ -114,6 +114,29 @@ def graph_to_mermaid(graph: ProceduralGraph, active: str | None = None, labels: 
     return "\n".join(lines)
 
 
+DOT_SHAPES = {NodeType.STATE.value: "ellipse", NodeType.ACTION.value: "box", NodeType.REASONING.value: "hexagon"}
+
+
+def graph_to_svg(graph: ProceduralGraph, active: str | None = None, status: dict | None = None) -> str:
+    """The same graph as an SVG string via Graphviz (needs the `dot` binary). `status` maps node ids and edge keys to
+    added / revised / removed for change colouring, as in a timeline frame; `active` outlines one node."""
+    import graphviz
+
+    status = status or {}
+    d = graphviz.Digraph(graph_attr={"rankdir": "LR", "nodesep": "0.3", "ranksep": "0.6"},
+                         node_attr={"fontname": "Helvetica", "fontsize": "11", "style": "rounded,filled", "fillcolor": "#f6f5f0"},
+                         edge_attr={"fontname": "Helvetica", "fontsize": "9", "color": "#8a887e", "fontcolor": "#55534c"})
+    for n in graph.nodes:
+        color = COLORS.get(status.get(n.id), "#1f8a7d" if n.id == active else "#8a887e")
+        width = "2.5" if n.id == active or n.id in status else "1"
+        d.node(n.id, shape=DOT_SHAPES[n.type.value], color=color, penwidth=width)
+    for e in graph.edges:
+        st = status.get(e.key())
+        d.edge(e.src, e.dst, label=e.rel.value, color=COLORS.get(st, "#8a887e"), penwidth="2.2" if st else "1",
+               style="dashed" if st == "removed" else "solid")
+    return d.pipe(format="svg").decode()
+
+
 def to_mermaid(frame: dict) -> str:
     """Flowchart of one frame; this round's changes are coloured. Nodes that no edge touches are left out."""
     used = {e[end] for e in frame["edges"] for end in ("src", "dst")}

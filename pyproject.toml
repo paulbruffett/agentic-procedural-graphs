@@ -27,7 +27,10 @@ enterprisearena = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "graphviz>=0.21",
+    "pytest>=8",
+]
 
 [build-system]
 requires = ["hatchling"]

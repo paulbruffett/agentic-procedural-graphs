@@ -1,7 +1,9 @@
 """analysis/graph_evolution.py: frames, text diff, Mermaid and the report files (no network)."""
 import json
 
-from analysis.graph_evolution import graph_to_mermaid, load_frames, report, text_diff, to_mermaid
+import pytest
+
+from analysis.graph_evolution import graph_to_mermaid, graph_to_svg, load_frames, report, text_diff, to_mermaid
 from pg.graph import Edge, EdgeRef, EditSet, Node, NodeType, ProceduralGraph, Relation
 
 E1 = Edge(src="Start", rel=Relation.LEADS_TO, dst="search", guidance="search first")
@@ -67,3 +69,14 @@ def test_graph_to_mermaid_shapes_and_active_node():
     m = graph_to_mermaid(g, active="search")
     assert m.startswith("flowchart LR") and '(["Start"])' in m and '["search"]' in m and "-->|LEADS_TO|" in m
     assert "class n2 active" in m and "|LEADS_TO|" not in graph_to_mermaid(g, labels=False)
+
+
+def test_graph_to_svg_draws_every_node_and_edge_label():
+    import shutil
+
+    if not shutil.which("dot"):
+        pytest.skip("graphviz `dot` binary not installed")
+    g = ProceduralGraph.skeleton("demo", [("search", "find")]).apply(EditSet(add_edges=[E1]))[0]
+    svg = graph_to_svg(g, active="search", status={E1.key(): "added"})
+    assert svg.lstrip().startswith("<?xml") or "<svg" in svg
+    assert all(n.id in svg for n in g.nodes) and "LEADS_TO" in svg and "#2a9d8f" in svg
