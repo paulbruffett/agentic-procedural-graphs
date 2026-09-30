@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" width="900" height="480" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f8a7d"/></marker>
+  </defs>
+  <style>
+    .box{fill:#f6f5f0;stroke:#8a887e;stroke-width:1.2;rx:6}
+    .llm{fill:#eef3ff;stroke:#3b5bdb;stroke-width:1.4;rx:6}
+    .code{fill:#fff;stroke:#8a887e;stroke-width:1.2;stroke-dasharray:4 3;rx:6}
+    .graph{fill:#e6f4f1;stroke:#1f8a7d;stroke-width:2.2;rx:6}
+    .t{text-anchor:middle;fill:#1d1d1b}
+    .s{text-anchor:middle;fill:#6b6a65;font-size:11px}
+    .e{fill:none;stroke:#555;stroke-width:1.4;marker-end:url(#a)}
+    .eg{fill:none;stroke:#1f8a7d;stroke-width:2;marker-end:url(#g)}
+    .lab{fill:#55534c;font-size:11px;text-anchor:middle}
+    .labg{fill:#1f8a7d;font-size:11px;text-anchor:middle}
+    .title{fill:#6b6a65;font-size:12px;font-weight:bold}
+    .leg{fill:#6b6a65;font-size:11px;text-anchor:start}
+  </style>
+
+  <text x="60" y="18" class="title">ONLINE: every step of every episode</text>
+  <text x="60" y="318" class="title">OFFLINE: once per evolution round</text>
+
+  <!-- online row -->
+  <rect x="60" y="50" width="130" height="46" rx="6" class="box"/>
+  <text x="125" y="69" class="t">Environment</text>
+  <text x="125" y="85" class="s">task, tools, score()</text>
+
+  <rect x="230" y="50" width="120" height="46" rx="6" class="llm"/>
+  <text x="290" y="69" class="t">Guidance LLM</text>
+  <text x="290" y="85" class="s">neighbourhood -&gt; advice</text>
+
+  <rect x="390" y="50" width="120" height="46" rx="6" class="llm"/>
+  <text x="450" y="69" class="t">Solver LLM</text>
+  <text x="450" y="85" class="s">advice in system prompt</text>
+
+  <rect x="550" y="50" width="120" height="46" rx="6" class="code"/>
+  <text x="610" y="69" class="t">Tool call</text>
+  <text x="610" y="85" class="s">step recorded</text>
+
+  <rect x="710" y="50" width="130" height="46" rx="6" class="box"/>
+  <text x="775" y="69" class="t">Trajectory</text>
+  <text x="775" y="85" class="s">steps, score, usage</text>
+
+  <path d="M190,73 L228,73" class="e"/>
+  <path d="M350,73 L388,73" class="e"/>
+  <path d="M510,73 L548,73" class="e"/>
+  <path d="M670,73 L708,73" class="e"/>
+
+  <!-- tool call -> environment (acts on the episode): dotted arc above the row -->
+  <path d="M590,50 C560,22 180,22 140,48" class="e" stroke-dasharray="3 3"/>
+  <text x="500" y="34" class="lab">tools act on the episode</text>
+
+  <!-- tool call -> guidance (localization): arc below the row, left of the graph box -->
+  <path d="M600,96 C580,140 320,140 300,98" class="e"/>
+  <text x="450" y="146" class="lab">last tool name localizes the agent (match)</text>
+
+  <!-- the shared graph, centred between the loops -->
+  <rect x="370" y="180" width="160" height="56" rx="6" class="graph"/>
+  <text x="450" y="203" class="t" font-weight="bold">Procedural graph</text>
+  <text x="450" y="221" class="s">JSON: nodes, edges, text</text>
+
+  <!-- graph -> guidance: 2-hop neighbourhood -->
+  <path d="M400,180 C360,165 300,140 290,98" class="eg"/>
+  <text x="255" y="150" class="labg">2-hop neighbourhood</text>
+
+  <!-- graph -> rollout -->
+  <path d="M400,236 C330,260 135,265 135,343" class="eg"/>
+  <text x="212" y="283" class="labg">guides the rollout</text>
+
+  <!-- offline row -->
+  <rect x="60" y="345" width="150" height="46" rx="6" class="code"/>
+  <text x="135" y="364" class="t">Rollout on train batch</text>
+  <text x="135" y="380" class="s">run_batch, current graph</text>
+
+  <rect x="250" y="345" width="140" height="46" rx="6" class="code"/>
+  <text x="320" y="364" class="t">Rank by score</text>
+  <text x="320" y="380" class="s">3 best + 3 worst</text>
+
+  <rect x="430" y="345" width="120" height="46" rx="6" class="llm"/>
+  <text x="490" y="364" class="t">Refiner LLM</text>
+  <text x="490" y="380" class="s">returns an EditSet</text>
+
+  <rect x="590" y="345" width="110" height="46" rx="6" class="code"/>
+  <text x="645" y="364" class="t">apply()</text>
+  <text x="645" y="380" class="s">candidate graph</text>
+
+  <rect x="740" y="345" width="120" height="46" rx="6" class="code"/>
+  <text x="800" y="364" class="t">Validation gate</text>
+  <text x="800" y="380" class="s">val score &gt;= current?</text>
+
+  <path d="M210,368 L248,368" class="e"/>
+  <path d="M390,368 L428,368" class="e"/>
+  <path d="M550,368 L588,368" class="e"/>
+  <path d="M700,368 L738,368" class="e"/>
+
+  <!-- accept -> graph -->
+  <path d="M800,345 C800,270 570,240 532,220" class="eg"/>
+  <text x="705" y="272" class="labg">accept: becomes the graph</text>
+
+  <!-- reject -> refiner (memory) -->
+  <path d="M800,391 C800,445 520,445 495,393" class="e"/>
+  <text x="648" y="441" class="lab">reject: rejection memory, into the next refiner prompt</text>
+
+  <!-- legend -->
+  <rect x="60" y="458" width="18" height="12" rx="6" class="llm"/><text x="86" y="468" class="leg">LLM</text>
+  <rect x="140" y="458" width="18" height="12" rx="6" class="code"/><text x="166" y="468" class="leg">plain code, no model</text>
+  <rect x="320" y="458" width="18" height="12" rx="6" class="graph"/><text x="346" y="468" class="leg">the only thing that persists and improves</text>
+</svg>
