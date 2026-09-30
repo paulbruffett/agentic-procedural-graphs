@@ -3,8 +3,7 @@
     uv run --with matplotlib python -m analysis.result_charts runs/<stamp>-eval-enterprisearena \\
         [--evolve graphs/evolved/<run>] [--out analysis/img/<name>]
 
-Writes: metrics.png (small multiples: survived, months, steps, cost per graph), slope.png (per-seed months, none ->
-evolved), survival.png (fraction of companies solvent by month, per graph), and, with --evolve, evolution.png
+Writes: metrics.png (2x2 small multiples: survived, months, steps, cost per graph), survival.png (fraction of companies solvent by month, per graph), and, with --evolve, evolution.png
 (validation score and graph size by round). Graph specs are labelled by their file name; `none` stays `none`.
 """
 from __future__ import annotations
@@ -55,8 +54,8 @@ def metrics_panel(data: dict, out: Path) -> None:
               ("months", "mean months survived", lambda ts: mean(t.metrics["months_survived"] for t in ts), "{:.0f}"),
               ("steps", "steps per episode", lambda ts: mean(len(t.steps) for t in ts), "{:.0f}"),
               ("cost", "cost per episode ($)", lambda ts: mean(cost(t) for t in ts), "{:.2f}")]
-    fig, axes = plt.subplots(1, 4, figsize=(11, 3.2))
-    for ax, (_, title, f, fmt) in zip(axes, panels):
+    fig, axes = plt.subplots(2, 2, figsize=(7.2, 6))
+    for ax, (_, title, f, fmt) in zip(axes.flat, panels):
         vals = [f(ts) for ts in data.values()]
         bars = ax.bar(names, vals, color=SERIES[: len(names)], width=0.62)
         for b, v, ts in zip(bars, vals, data.values()):
@@ -66,28 +65,8 @@ def metrics_panel(data: dict, out: Path) -> None:
         ax.set_ylim(0, max(vals) * 1.18)
         ax.tick_params(axis="x", length=0, labelsize=9); ax.tick_params(axis="y", length=0, labelsize=8)
         ax.grid(axis="y", color=GRID, linewidth=0.8); ax.set_axisbelow(True)
-    fig.suptitle("Test split: 20 unseen seeds, 132 months, horizon hidden", x=0.01, ha="left", fontsize=11, color=INK)
-    fig.tight_layout(rect=(0, 0, 1, 0.93)); fig.savefig(out / "metrics.png"); plt.close(fig)
-
-
-def slope(data: dict, baseline: str, target: str, out: Path) -> None:
-    b = {t.task_id: t.metrics["months_survived"] for t in data[baseline]}
-    e = {t.task_id: t.metrics["months_survived"] for t in data[target]}
-    seeds = sorted(set(b) & set(e))
-    fig, ax = plt.subplots(figsize=(4.6, 5))
-    up = down = flat = both = 0
-    for s in seeds:
-        d = e[s] - b[s]; up += d > 0; down += d < 0; flat += d == 0 and e[s] < 132; both += d == 0 and e[s] >= 132
-        color = SERIES[2] if d > 0 else SERIES[1] if d < 0 else MUTED
-        ax.plot([0, 1], [b[s], e[s]], color=color, linewidth=1.6, alpha=0.85, solid_capstyle="round")
-        ax.plot([0, 1], [b[s], e[s]], "o", color=color, markersize=4.5, markeredgecolor=SURFACE, markeredgewidth=1)
-    ax.set_xlim(-0.25, 1.25); ax.set_xticks([0, 1]); ax.set_xticklabels([short(baseline), short(target)], color=INK)
-    ax.set_ylabel("months survived (of 132)"); ax.set_ylim(0, 140); ax.tick_params(axis="x", length=0)
-    ax.axhline(132, color=GRID, linewidth=0.8, zorder=0); ax.grid(axis="y", color=GRID, linewidth=0.8); ax.set_axisbelow(True)
-    ax.text(1.06, 132, "full horizon", va="center", fontsize=8, color=MUTED)
-    ax.text(1.06, 33, "first growth\nsurge", va="center", fontsize=8, color=MUTED)
-    ax.set_title(f"Same seed, two graphs: {up} improved, {down} worse,\n{both} survived under both, {flat} failed under both", loc="left", fontsize=10, color=INK)
-    fig.tight_layout(); fig.savefig(out / "slope.png"); plt.close(fig)
+    fig.suptitle("Test split: 20 unseen seeds, 132 months, horizon hidden", x=0.02, ha="left", fontsize=11, color=INK)
+    fig.tight_layout(rect=(0, 0, 1, 0.95), h_pad=2.0); fig.savefig(out / "metrics.png"); plt.close(fig)
 
 
 def survival(data: dict, out: Path) -> None:
@@ -143,13 +122,11 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("run_dir", type=Path)
     p.add_argument("--evolve", type=Path, default=None, help="evolve run directory, for evolution.png")
-    p.add_argument("--baseline", default="none"); p.add_argument("--target", default=None, help="slope target; default: the graph named best.json")
     p.add_argument("--out", type=Path, default=None, help="default: <run_dir>/charts")
     a = p.parse_args(argv)
     out = a.out or a.run_dir / "charts"; out.mkdir(parents=True, exist_ok=True)
     data = load(a.run_dir)
-    target = a.target or next(s for s in data if Path(s).name == "best.json")
-    metrics_panel(data, out); slope(data, a.baseline, target, out); survival(data, out)
+    metrics_panel(data, out); survival(data, out)
     if a.evolve:
         evolution(a.evolve, out)
     print("wrote", ", ".join(sorted(p.name for p in out.glob("*.png"))), "to", out)
