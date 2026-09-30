@@ -117,13 +117,18 @@ def graph_to_mermaid(graph: ProceduralGraph, active: str | None = None, labels: 
 DOT_SHAPES = {NodeType.STATE.value: "ellipse", NodeType.ACTION.value: "box", NodeType.REASONING.value: "hexagon"}
 
 
-def graph_to_svg(graph: ProceduralGraph, active: str | None = None, status: dict | None = None) -> str:
+def graph_to_svg(graph: ProceduralGraph, active: str | None = None, status: dict | None = None,
+                 rankdir: str = "LR", drop_isolated: bool = False) -> str:
     """The same graph as an SVG string via Graphviz (needs the `dot` binary). `status` maps node ids and edge keys to
-    added / revised / removed for change colouring, as in a timeline frame; `active` outlines one node."""
+    added / revised / removed for change colouring, as in a timeline frame; `active` outlines one node.
+    `rankdir="TB"` gives a taller, squarer figure; `drop_isolated` leaves out nodes no edge touches."""
     import graphviz
 
     status = status or {}
-    d = graphviz.Digraph(graph_attr={"rankdir": "LR", "nodesep": "0.3", "ranksep": "0.6"},
+    if drop_isolated:
+        used = {end for e in graph.edges for end in (e.src, e.dst)} | set(status) | ({active} if active else set())
+        graph = ProceduralGraph(name=graph.name, nodes=[n for n in graph.nodes if n.id in used], edges=graph.edges)
+    d = graphviz.Digraph(graph_attr={"rankdir": rankdir, "nodesep": "0.3", "ranksep": "0.6"},
                          node_attr={"fontname": "Helvetica", "fontsize": "11", "style": "rounded,filled", "fillcolor": "#f6f5f0"},
                          edge_attr={"fontname": "Helvetica", "fontsize": "9", "color": "#8a887e", "fontcolor": "#55534c"})
     for n in graph.nodes:

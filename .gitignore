@@ -13,3 +13,4 @@ runs
 graphs/evolved
 private
 .ipynb_checkpoints/
+.DS_Store

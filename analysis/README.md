@@ -10,7 +10,7 @@ from here. Deleting `analysis/` must leave `pg evolve` / `pg eval` fully working
 | [`graph_evolution.py`](graph_evolution.py) | How a graph changed over an evolve run: text diff, Mermaid per round, interactive timeline; also `graph_to_svg` / `graph_to_mermaid` for drawing any graph |
 | [`timeline_template.html`](timeline_template.html) | The timeline page `graph_evolution.py report` fills in (self-contained apart from the dagre layout library, loaded from a CDN) |
 | [`walkthrough.ipynb`](walkthrough.ipynb) | **Start here.** The walkthrough as an executable notebook: the conceptual map, then every mechanism exercised by a cell on HotpotQA, ending with a real three-round evolution and its timeline. Saved with outputs. Sections 1–6, 8, 10–11 and 13 need no API key; the live sections cost about $1.50 in total (the evolve cell reuses its run on re-open). Graph diagrams are SVGs made with Graphviz: `brew install graphviz` (the `dot` binary; the Python package is a dev dependency); without it the notebook falls back to Mermaid blocks. `uv run --with jupyterlab jupyter lab` from the repo root |
-| [`img/`](img/) | Figures the notebook embeds (`loops.svg`: the online and offline loops) |
+| [`img/`](img/) | Figures: `loops.svg` (the online and offline loops, embedded in the notebook); `ea-run3/` (article stills of the EnterpriseArena evolution: `round_0/1/3.png|svg`, top-to-bottom layout with that round's changes coloured, and `timeline.gif`, the interactive timeline stepping through all six rounds) |
 | [`walkthrough.md`](walkthrough.md) | What the notebook cannot run cheaply: the EnterpriseArena scenario and the results, including the from-scratch evolution that took test survival from 1/20 to 17/19 |
 
 ## Watching a graph evolve
@@ -30,7 +30,7 @@ half-way, because it only reads what `evolve` saves as it goes: `round_k.json`, 
 `edits/round_k.json`. Runs from before `edits/` was recorded cannot show what a *rejected* round proposed; the
 timeline says so on those rounds.
 
-- **`timeline.html`** - step through rounds (buttons or arrow keys). Each round shows the refiner's *proposal*
+- **`timeline.html`** - step through rounds (buttons or arrow keys); `#round=k` opens on a round, `#theme=light` forces the light palette, `#fit` scales the graph to the panel (the three combine, e.g. for screenshots). Each round shows the refiner's *proposal*
   against the graph before it: green = added, amber = revised, red dashed = removed, with the verdict, the
   validation curve (hollow = rejected) and the refiner's rationale. Click an edge for its condition / guidance /
   pitfalls and, if it was revised, the text it replaced. Node positions are fixed across rounds.
