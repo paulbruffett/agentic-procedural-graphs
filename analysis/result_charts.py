@@ -15,6 +15,7 @@ from statistics import mean
 
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 
 from pg.evaluate import label_of
 from pg.trajectory import read_jsonl
@@ -37,9 +38,10 @@ def short(spec: str) -> str:
 ORDER = ["none", "skeleton", "evolved", "expert"]  # least to most procedural knowledge; anything else goes after, as run
 
 
-def load(run_dir: Path) -> dict[str, list]:
-    """Trajectories per graph, ordered none -> skeleton -> evolved -> expert, errored episodes dropped."""
-    specs = [r["graph"] for r in json.loads((run_dir / "metrics.json").read_text())]
+def load(run_dir: Path, exclude: set[str] = frozenset()) -> dict[str, list]:
+    """Trajectories per graph, ordered none -> skeleton -> evolved -> expert, errored episodes dropped.
+    `exclude` names graphs (by their short label) to leave out."""
+    specs = [r["graph"] for r in json.loads((run_dir / "metrics.json").read_text()) if short(r["graph"]) not in exclude]
     specs.sort(key=lambda s: ORDER.index(short(s)) if short(s) in ORDER else len(ORDER))
     return {s: [t for t in read_jsonl(run_dir / f"{label_of(s)}.jsonl") if not t.error] for s in specs}
 
@@ -63,6 +65,8 @@ def metrics_panel(data: dict, out: Path) -> None:
             ax.text(b.get_x() + b.get_width() / 2, b.get_height(), label, ha="center", va="bottom", fontsize=9, color=INK)
         ax.set_title(title, loc="left", fontsize=10, color=INK)
         ax.set_ylim(0, max(vals) * 1.18)
+        if title.startswith("companies"):
+            ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
         ax.tick_params(axis="x", length=0, labelsize=9); ax.tick_params(axis="y", length=0, labelsize=8)
         ax.grid(axis="y", color=GRID, linewidth=0.8); ax.set_axisbelow(True)
     fig.suptitle("Test split: 20 unseen seeds, 132 months, horizon hidden", x=0.02, ha="left", fontsize=11, color=INK)
@@ -76,12 +80,12 @@ def survival(data: dict, out: Path) -> None:
         months = [t.metrics["months_survived"] for t in ts]
         xs = list(range(horizon + 1)); ys = [sum(m >= x for m in months) / len(months) for x in xs]
         ax.step(xs, ys, where="post", color=color, linewidth=2)
-        ax.text(horizon + 1.5, ys[-1] + (0.03 if spec.endswith("expert.json") else -0.03 if short(spec) == "evolved" else 0),
+        ax.text(horizon + 1.5, ys[-1],
                 f"{short(spec)}  {ys[-1]:.0%}", va="center", fontsize=9, color=INK)
     ax.set_xlim(0, horizon + 22); ax.set_xticks(range(0, horizon + 1, 20)); ax.set_ylim(0, 1.04); ax.set_xlabel("month"); ax.set_ylabel("companies still solvent")
     ax.set_yticks([0, 0.25, 0.5, 0.75, 1]); ax.set_yticklabels(["0%", "25%", "50%", "75%", "100%"])
     ax.grid(axis="y", color=GRID, linewidth=0.8); ax.set_axisbelow(True)
-    ax.set_title("Survival by month, 20 test seeds per graph", loc="left", fontsize=10, color=INK)
+    ax.set_title(f"Survival by month, {max(len(ts) for ts in data.values())} test seeds per graph", loc="left", fontsize=10, color=INK)
     fig.tight_layout(); fig.savefig(out / "survival.png"); plt.close(fig)
 
 
@@ -123,9 +127,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("run_dir", type=Path)
     p.add_argument("--evolve", type=Path, default=None, help="evolve run directory, for evolution.png")
     p.add_argument("--out", type=Path, default=None, help="default: <run_dir>/charts")
+    p.add_argument("--exclude", default="", help="graphs to leave out, by short label, comma-separated (e.g. expert)")
     a = p.parse_args(argv)
     out = a.out or a.run_dir / "charts"; out.mkdir(parents=True, exist_ok=True)
-    data = load(a.run_dir)
+    data = load(a.run_dir, {x.strip() for x in a.exclude.split(",") if x.strip()})
     metrics_panel(data, out); survival(data, out)
     if a.evolve:
         evolution(a.evolve, out)
