@@ -3,7 +3,7 @@
     uv run --with matplotlib python -m analysis.result_charts runs/<stamp>-eval-enterprisearena \\
         [--evolve graphs/evolved/<run>] [--out analysis/img/<name>]
 
-Writes: metrics.png (2x2 small multiples: survived, months, steps, cost per graph), survival.png (fraction of companies solvent by month, per graph), and, with --evolve, evolution.png
+Writes: metrics.png (2x2 small multiples: survived, months, tool calls per month survived, cost per graph), survival.png (fraction of companies solvent by month, per graph), and, with --evolve, evolution.png
 (validation score and graph size by round). Graph specs are labelled by their file name; `none` stays `none`.
 """
 from __future__ import annotations
@@ -54,7 +54,7 @@ def metrics_panel(data: dict, out: Path) -> None:
     names = [short(s) for s in data]
     panels = [("survived", "companies survived", lambda ts: sum(t.success for t in ts), "{:.0f}"),
               ("months", "mean months survived", lambda ts: mean(t.metrics["months_survived"] for t in ts), "{:.0f}"),
-              ("steps", "steps per episode", lambda ts: mean(len(t.steps) for t in ts), "{:.0f}"),
+              ("steps", "tool calls per month survived", lambda ts: sum(len(t.steps) for t in ts) / sum(t.metrics["months_survived"] for t in ts), "{:.1f}"),
               ("cost", "cost per episode ($)", lambda ts: mean(cost(t) for t in ts), "{:.2f}")]
     fig, axes = plt.subplots(2, 2, figsize=(7.2, 6))
     for ax, (_, title, f, fmt) in zip(axes.flat, panels):
