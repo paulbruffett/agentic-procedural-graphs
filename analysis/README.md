@@ -31,7 +31,7 @@ half-way, because it only reads what `evolve` saves as it goes: `round_k.json`, 
 `edits/round_k.json`. Runs from before `edits/` was recorded cannot show what a *rejected* round proposed; the
 timeline says so on those rounds.
 
-- **`timeline.html`** - step through rounds (buttons or arrow keys); the graph spans the page with the validation curve, the selected item and the rationale below it. `#round=k` opens on a round, `#theme=light` forces the light palette, `#scroll` shows the graph at natural size instead of fitting the width (they combine, e.g. for screenshots). Each round shows the refiner's *proposal*
+- **`timeline.html`** - step through rounds (buttons or arrow keys); the graph spans the page with the validation curve, the selected item and the rationale below it. `#round=k` opens on a round, `#theme=light` or `#theme=dark` forces that palette, `#scroll` shows the graph at natural size instead of fitting the width (they combine, e.g. for screenshots). Each round shows the refiner's *proposal*
   against the graph before it: green = added, amber = revised, red dashed = removed, with the verdict, the
   validation curve (hollow = rejected) and the refiner's rationale. Click an edge for its condition / guidance /
   pitfalls and, if it was revised, the text it replaced. Node positions are fixed across rounds.

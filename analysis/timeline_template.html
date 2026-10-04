@@ -9,6 +9,8 @@
           --added:#1f8a7d; --revised:#c9820e; --removed:#c8374c; --accent:#3b5bdb; }
   @media (prefers-color-scheme: dark) { :root:not(.light) { --bg:#161614; --panel:#1f1f1c; --ink:#ecebe6; --muted:#a3a198;
           --line:#3a3934; --kept:#77756c; --added:#4fc3b4; --revised:#f0b24a; --removed:#ef6f82; --accent:#8ea2ff; } }
+  :root.dark { --bg:#161614; --panel:#1f1f1c; --ink:#ecebe6; --muted:#a3a198;
+          --line:#3a3934; --kept:#77756c; --added:#4fc3b4; --revised:#f0b24a; --removed:#ef6f82; --accent:#8ea2ff; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
   main { max-width:1400px; margin:0 auto; padding:20px 16px 48px; }
@@ -67,7 +69,7 @@
 const DATA = /*DATA*/null;
 const F = DATA.frames, NS = "http://www.w3.org/2000/svg", key = e => `${e.src}|${e.rel}|${e.dst}`;
 let cur = F.length - 1, sel = null;
-if (/theme=light/.test(location.hash)) document.documentElement.classList.add("light");  // #theme=light: light palette regardless of the OS setting
+const theme = /theme=(light|dark)/.exec(location.hash); if (theme) document.documentElement.classList.add(theme[1]);  // #theme=light|dark: that palette regardless of the OS setting
 const want = /round=(\d+)/.exec(location.hash);  // #round=k opens on that round (frames, screenshots, links)
 if (want) cur = Math.min(F.length - 1, Math.max(0, +want[1]));
 document.getElementById("title").textContent = "Graph evolution: " + DATA.run;
